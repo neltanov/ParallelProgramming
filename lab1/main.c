@@ -103,27 +103,27 @@ void mulMatVec(double *matrix, double *vec, size_t size, double *res) {
 
     MPI_Send(buf, rangeLength, MPI_DOUBLE, 0, 1, MPI_COMM_WORLD);
 
-//    if (rank == 0) {
-//        MPI_Aint *extent;
-//        MPI_Aint *lb;
-//        if (size % nproc != 0) {
-//            for (int i = 0; i < nproc; i++) {
-//                MPI_Recv(res + i * (int) size / nproc * MPI_Type_get_extent(MPI_DOUBLE, lb, extent),
-//                         (int) size / nproc, MPI_DOUBLE, i, 1, MPI_COMM_WORLD, &status);
-//            }
-//        }
-//        else {
-//            for (int i = 0; i < nproc - 1; i++) {
-//                MPI_Recv(res + i * (int) size / nproc * MPI_Type_get_extent(MPI_DOUBLE, lb, extent),
-//                         (int) size / nproc, MPI_DOUBLE, i, 1, MPI_COMM_WORLD, &status);
-//            }
-//            rangeLength = (int) size / nproc + (int) size - rangeLength * nproc;
-//            MPI_Recv(res + (nproc - 1) * (int) size / nproc * MPI_Type_get_extent(MPI_DOUBLE, lb, extent),
-//                     rangeLength, MPI_DOUBLE, nproc - 1, 1, MPI_COMM_WORLD, &status);
-//        }
-//        endtime = MPI_Wtime();
-//        printf("Time taken: %lf", (endtime - starttime));
-//    }
+    if (rank == 0) {
+        MPI_Aint *extent;
+        MPI_Aint *lb;
+        if (size % nproc != 0) {
+            for (int i = 0; i < nproc; i++) {
+                MPI_Recv(res + i * (int) size / nproc * MPI_Type_get_extent(MPI_DOUBLE, lb, extent),
+                         (int) size / nproc, MPI_DOUBLE, i, 1, MPI_COMM_WORLD, &status);
+            }
+        }
+        else {
+            for (int i = 0; i < nproc - 1; i++) {
+                MPI_Recv(res + i * (int) size / nproc * MPI_Type_get_extent(MPI_DOUBLE, lb, extent),
+                         (int) size / nproc, MPI_DOUBLE, i, 1, MPI_COMM_WORLD, &status);
+            }
+            rangeLength = (int) size / nproc + (int) size - rangeLength * nproc;
+            MPI_Recv(res + (nproc - 1) * (int) size / nproc * MPI_Type_get_extent(MPI_DOUBLE, lb, extent),
+                     rangeLength, MPI_DOUBLE, nproc - 1, 1, MPI_COMM_WORLD, &status);
+        }
+        endtime = MPI_Wtime();
+        printf("Time taken: %lf", (endtime - starttime));
+    }
 
 }
 
@@ -143,6 +143,12 @@ void singleIterate(double *A, double *x, double *b, size_t size, double epsilon)
     const double tau = 0.01;
     double *res = (double *) malloc(size * sizeof(double));
 
+    int erCode = MPI_Init(NULL, NULL);
+    if (erCode) {
+        printf("Startup error, execution stopped\n");
+        MPI_Abort(MPI_COMM_WORLD, erCode);
+    }
+
     mulMatVec(A, x, size, res);
     subVectors(res, b, size);
 
@@ -152,6 +158,8 @@ void singleIterate(double *A, double *x, double *b, size_t size, double epsilon)
         mulNumVec(tau, res, size);
         subVectors(x,res, size);
     }
+    MPI_Finalize();
+
     free(res);
 }
 
@@ -169,15 +177,7 @@ int main(int argc, char *argv[]) {
     double *x = (double *) malloc(N * sizeof(double));
     initSolution(x, N);
 
-    int erCode = MPI_Init(NULL, NULL);
-    if (erCode) {
-        printf("Startup error, execution stopped\n");
-        MPI_Abort(MPI_COMM_WORLD, erCode);
-    }
-
     singleIterate(A, x, b, N, epsilon);
-
-    MPI_Finalize();
 
     printArray(x, N);
 
