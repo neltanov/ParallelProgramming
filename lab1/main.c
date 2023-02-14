@@ -63,15 +63,16 @@ double euclideanNorm(double *vec, size_t size) {
 
 void mulMatVec(double *matrix, double *vec, size_t size, double *res) {
     int nproc, rank;
-    double starttime, endtime;
+//    double starttime, endtime;
 
     MPI_Comm_size(MPI_COMM_WORLD, &nproc);
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+    int rangeLength = (int) size / nproc;
+
     // Отправка длин диапазонов каждому процессу из корневого.
     if (rank == 0) {
-        starttime = MPI_Wtime();
-        int rangeLength = (int) size / nproc;
-        if (size % nproc != 0) {
+//        starttime = MPI_Wtime();
+        if (size % nproc == 0) {
             for (int i = 0; i < nproc; i++) {
                 MPI_Send(&rangeLength, 1, MPI_INT, i, 1, MPI_COMM_WORLD);
             }
@@ -87,44 +88,46 @@ void mulMatVec(double *matrix, double *vec, size_t size, double *res) {
     // Переменная для записи состояния
     MPI_Status status;
 
-    int rangeLength;
     // Получение длины диапозона из корневого процесса.
     MPI_Recv(&rangeLength, 1, MPI_INT, 0, 1, MPI_COMM_WORLD, &status);
 
     // Буфер для вычисленных значений умножения строк на вектор.
     double *buf = (double *) malloc(rangeLength * sizeof(double));
-
-    // Умножение соответствующих процессу строк на вектор.
+    // Умножение соответствующих процессу стро к на вектор.
     for (size_t i = 0; i < rangeLength; i++) {
         for (size_t j = 0; j < size; j++) {
             buf[i] += matrix[i * size + j] * vec[j];
         }
     }
 
-    MPI_Send(buf, rangeLength, MPI_DOUBLE, 0, 1, MPI_COMM_WORLD);
+    MPI_Send(buf, rangeLength, MPI_DOUBLE, 0, 2, MPI_COMM_WORLD);
 
     if (rank == 0) {
-        MPI_Aint *extent;
-        MPI_Aint *lb;
-        if (size % nproc != 0) {
+//        MPI_Aint *extent = (MPI_Aint *) 8;
+//        MPI_Aint *lb;
+        rangeLength = (int) size / nproc;
+        if (size % nproc == 0) {
             for (int i = 0; i < nproc; i++) {
-                MPI_Recv(res + i * (int) size / nproc * MPI_Type_get_extent(MPI_DOUBLE, lb, extent),
-                         (int) size / nproc, MPI_DOUBLE, i, 1, MPI_COMM_WORLD, &status);
+                MPI_Recv(res + i * (int) size / nproc,
+                         rangeLength, MPI_DOUBLE, i, 2, MPI_COMM_WORLD, &status);
             }
         }
         else {
             for (int i = 0; i < nproc - 1; i++) {
-                MPI_Recv(res + i * (int) size / nproc * MPI_Type_get_extent(MPI_DOUBLE, lb, extent),
-                         (int) size / nproc, MPI_DOUBLE, i, 1, MPI_COMM_WORLD, &status);
+                MPI_Recv(res + i * (int) size / nproc,
+                         rangeLength, MPI_DOUBLE, i, 2, MPI_COMM_WORLD, &status);
             }
-            rangeLength = (int) size / nproc + (int) size - rangeLength * nproc;
-            MPI_Recv(res + (nproc - 1) * (int) size / nproc * MPI_Type_get_extent(MPI_DOUBLE, lb, extent),
-                     rangeLength, MPI_DOUBLE, nproc - 1, 1, MPI_COMM_WORLD, &status);
+            rangeLength += (int) size - rangeLength * nproc;
+            MPI_Recv(res + (nproc - 1) * (int) size / nproc,
+                     rangeLength, MPI_DOUBLE, nproc - 1, 2, MPI_COMM_WORLD, &status);
         }
-        endtime = MPI_Wtime();
-        printf("Time taken: %lf", (endtime - starttime));
+//        endtime = MPI_Wtime();
+//        printf("Time taken: %lf", (endtime - starttime));
+        for (int i = 0; i < nproc; i++) {
+            MPI_Send(res, (int) size, MPI_DOUBLE, i, 3, MPI_COMM_WORLD);
+        }
     }
-
+    MPI_Recv(res, (int) size, MPI_DOUBLE, 0, 3, MPI_COMM_WORLD, &status);
 }
 
 void subVectors(double *a, double *b, size_t size) {
@@ -151,14 +154,19 @@ void singleIterate(double *A, double *x, double *b, size_t size, double epsilon)
 
     mulMatVec(A, x, size, res);
     subVectors(res, b, size);
+    int rank;
+    MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+//    printf("#%d res after Ax-b: \n", rank);
 
+    printArray(res, size);
     while (euclideanNorm(res, size) / euclideanNorm(b, size) >= epsilon) {
+        printf("norm in process #%d = %lf\n", rank, euclideanNorm(res, size) / euclideanNorm(b, size));
         mulMatVec(A, x, size, res);
         subVectors(res, b, size);
         mulNumVec(tau, res, size);
         subVectors(x,res, size);
     }
-    MPI_Finalize();
+    printf("success! process #%d\n", rank);
 
     free(res);
 }
@@ -184,5 +192,6 @@ int main(int argc, char *argv[]) {
     free(A);
     free(b);
     free(x);
+    MPI_Finalize();
     return 0;
 }
