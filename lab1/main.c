@@ -2,6 +2,11 @@
 #include <stdlib.h>
 #include <mpi.h>
 
+#define EPS 0.0000000001
+#define TAU 0.01
+
+#define ROOT 0
+
 void initMatrix(double *matrix, size_t size) {
     size_t line = 1;
     for (size_t i = 0; i < size * size; i++) {
@@ -84,50 +89,56 @@ void mulMatVec(double *matrix, double *vec, size_t size, double *res) {
             rangeLength += (int) size - rangeLength * nproc;
             MPI_Send(&rangeLength, 1, MPI_INT, nproc - 1, 1, MPI_COMM_WORLD);
         }
+        printf("Data has sent to all processes\n");
     }
     // Переменная для записи состояния
     MPI_Status status;
 
     // Получение длины диапозона из корневого процесса.
-    MPI_Recv(&rangeLength, 1, MPI_INT, 0, 1, MPI_COMM_WORLD, &status);
-
+    MPI_Recv(&rangeLength, 1, MPI_INT, ROOT, 1, MPI_COMM_WORLD, &status);
+    printf("Data has recieved from root process to process #%d. RangeLength = %d\n", rank, rangeLength);
+    printMatrix(matrix, size);
+    printArray(vec, size);
     // Буфер для вычисленных значений умножения строк на вектор.
     double *buf = (double *) malloc(rangeLength * sizeof(double));
-    // Умножение соответствующих процессу стро к на вектор.
-    for (size_t i = 0; i < rangeLength; i++) {
-        for (size_t j = 0; j < size; j++) {
+    // Умножение соответствующих процессу строк на вектор.
+    for (int i = 0; i < rangeLength; i++) {
+        for (int j = 0; j < size; j++) {
             buf[i] += matrix[i * size + j] * vec[j];
         }
     }
-
-    MPI_Send(buf, rangeLength, MPI_DOUBLE, 0, 2, MPI_COMM_WORLD);
+    printArray(buf, size);
+    MPI_Send(buf, rangeLength, MPI_DOUBLE, ROOT, 2, MPI_COMM_WORLD);
+    printf("Data has sent to root process from process #%d\n", rank);
 
     if (rank == 0) {
-//        MPI_Aint *extent = (MPI_Aint *) 8;
-//        MPI_Aint *lb;
         rangeLength = (int) size / nproc;
         if (size % nproc == 0) {
-            for (int i = 0; i < nproc; i++) {
-                MPI_Recv(res + i * (int) size / nproc,
-                         rangeLength, MPI_DOUBLE, i, 2, MPI_COMM_WORLD, &status);
+            for (int process = 0; process < nproc; process++) {
+                MPI_Recv(res + process * (int) size / nproc,
+                         rangeLength, MPI_DOUBLE, process, 2, MPI_COMM_WORLD, &status);
             }
         }
         else {
-            for (int i = 0; i < nproc - 1; i++) {
-                MPI_Recv(res + i * (int) size / nproc,
-                         rangeLength, MPI_DOUBLE, i, 2, MPI_COMM_WORLD, &status);
+            for (int process = 0; process < nproc - 1; process++) {
+                MPI_Recv(res + process * (int) size / nproc,
+                         rangeLength, MPI_DOUBLE, process, 2, MPI_COMM_WORLD, &status);
             }
             rangeLength += (int) size - rangeLength * nproc;
             MPI_Recv(res + (nproc - 1) * (int) size / nproc,
                      rangeLength, MPI_DOUBLE, nproc - 1, 2, MPI_COMM_WORLD, &status);
         }
+        printf("Data has recieved from process #%d\n", rank);
+
 //        endtime = MPI_Wtime();
 //        printf("Time taken: %lf", (endtime - starttime));
-        for (int i = 0; i < nproc; i++) {
-            MPI_Send(res, (int) size, MPI_DOUBLE, i, 3, MPI_COMM_WORLD);
+        for (int process = 0; process < nproc; process++) {
+            MPI_Send(res, (int) size, MPI_DOUBLE, process, 3, MPI_COMM_WORLD);
         }
+        printf("Result vector has sent to all processes\n");
     }
-    MPI_Recv(res, (int) size, MPI_DOUBLE, 0, 3, MPI_COMM_WORLD, &status);
+    MPI_Recv(res, (int) size, MPI_DOUBLE, ROOT, 3, MPI_COMM_WORLD, &status);
+    printf("Result vector has received from root process to process #%d\n", rank);
 }
 
 void subVectors(double *a, double *b, size_t size) {
@@ -142,8 +153,7 @@ void mulNumVec(double num, double *vec, size_t size) {
     }
 }
 
-void singleIterate(double *A, double *x, double *b, size_t size, double epsilon) {
-    const double tau = 0.01;
+void singleIterate(double *A, double *x, double *b, size_t size) {
     double *res = (double *) malloc(size * sizeof(double));
 
     int erCode = MPI_Init(NULL, NULL);
@@ -152,32 +162,51 @@ void singleIterate(double *A, double *x, double *b, size_t size, double epsilon)
         MPI_Abort(MPI_COMM_WORLD, erCode);
     }
 
+    // test
+//    double *testMatrix = (double *) malloc(9 * sizeof(double));
+//    testMatrix[0] = 0;
+//    testMatrix[1] = 2;
+//    testMatrix[2] = 2;
+//    testMatrix[3] = 2;
+//    testMatrix[4] = 2;
+//    testMatrix[5] = 2;
+//    testMatrix[6] = 2;
+//    testMatrix[7] = 2;
+//    testMatrix[8] = 2;
+//    double *testVec = (double *) malloc(3 * sizeof(double));
+//    testVec[0] = 2;
+//    testVec[1] = 2;
+//    testVec[2] = 2;
+//    double *testRes = (double *) malloc (3 * sizeof(double));
+//    mulMatVec(testMatrix, testVec, 3, testRes);
+//    printArray(testRes, 3);
+
+
     mulMatVec(A, x, size, res);
     subVectors(res, b, size);
-    int rank;
-    MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+//    int rank;
+//    MPI_Comm_rank(MPI_COMM_WORLD, &rank);
 //    printf("#%d res after Ax-b: \n", rank);
 
-    printArray(res, size);
-    while (euclideanNorm(res, size) / euclideanNorm(b, size) >= epsilon) {
-        printf("norm in process #%d = %lf\n", rank, euclideanNorm(res, size) / euclideanNorm(b, size));
+    while (euclideanNorm(res, size) / euclideanNorm(b, size) >= EPS) {
+//        printf("norm in process #%d = %lf\n", rank, euclideanNorm(res, size) / euclideanNorm(b, size));
         mulMatVec(A, x, size, res);
         subVectors(res, b, size);
-        mulNumVec(tau, res, size);
+        mulNumVec(TAU, res, size);
         subVectors(x,res, size);
     }
-    printf("success! process #%d\n", rank);
-
+    MPI_Finalize();
     free(res);
 }
 
 int main(int argc, char *argv[]) {
+    // Если нужно будет использовать ввод с консоли.
 //    char *end;
 //    size_t N = strtoul(argv[1], &end, 10);
 //    double epsilon = strtod(argv[2], &end);
 
     size_t N = 10;
-    double epsilon = 0.0000001;
+
     double *A = (double *) malloc(N * N * sizeof(double));
     initMatrix(A, N);
     double *b = (double *) malloc(N * sizeof(double));
@@ -185,13 +214,12 @@ int main(int argc, char *argv[]) {
     double *x = (double *) malloc(N * sizeof(double));
     initSolution(x, N);
 
-    singleIterate(A, x, b, N, epsilon);
+    singleIterate(A, x, b, N);
 
     printArray(x, N);
 
     free(A);
     free(b);
     free(x);
-    MPI_Finalize();
     return 0;
 }
