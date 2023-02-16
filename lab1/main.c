@@ -7,9 +7,9 @@
 
 #define ROOT 0
 
-void initMatrix(double *matrix, size_t size) {
-    size_t line = 1;
-    for (size_t i = 0; i < size * size; i++) {
+void initMatrix(double *matrix, int size) {
+    int line = 1;
+    for (int i = 0; i < size * size; i++) {
         if (i == 0) {
             matrix[i] = 2;
         } else if (i % (line * size + line) == 0) {
@@ -21,29 +21,29 @@ void initMatrix(double *matrix, size_t size) {
     }
 }
 
-void initRightPart(double *array, size_t size) {
-    for (size_t i = 0; i < size; i++) {
-        array[i] = (double) size + 1;
+void initRightPart(double *array, int size) {
+    for (int i = 0; i < size; i++) {
+        array[i] = size + 1;
     }
 }
 
-void initSolution(double *array, size_t size) {
-    for (size_t i = 0; i < size; i++) {
+void initSolution(double *array, int size) {
+    for (int i = 0; i < size; i++) {
         array[i] = 0;
     }
 }
 
-void printMatrix(double *matrix, size_t size) {
-    for (size_t i = 0; i < size; i++) {
-        for (size_t j = 0; j < size; j++) {
+void printMatrix(double *matrix, int size) {
+    for (int i = 0; i < size; i++) {
+        for (int j = 0; j < size; j++) {
             printf("%0.3f ", matrix[i * size + j]);
         }
         printf("\n");
     }
 }
 
-void printArray(double *array, size_t size) {
-    for (size_t i = 0; i < size; i++) {
+void printArray(double *array, int size) {
+    for (int i = 0; i < size; i++) {
         printf("%0.3f ", array[i]);
     }
     printf("\n");
@@ -59,26 +59,27 @@ double sqrt(double n) {
     return sqrt;
 }
 
-double euclideanNorm(double *vec, size_t size) {
+double euclideanNorm(double *vec, int size) {
     double res = 0;
-    for (size_t i = 0; i < size; i++)
+    for (int i = 0; i < size; i++)
         res += vec[i] * vec[i];
     return sqrt(res);
 }
 
-void mulMatVec(double *matrix, double *vec, size_t size, double *res) {
+void mulMatVec(double *matrix, double *vec, int size, double *res) {
     int nproc, rank;
 //    double starttime, endtime;
 
     MPI_Comm_size(MPI_COMM_WORLD, &nproc);
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
-    int rangeLength = (int) size / nproc;
-
+    int rangeLength = size / nproc;
+    printf("process #%d\n", rank);
     // Отправка длин диапазонов каждому процессу из корневого.
     if (rank == 0) {
 //        starttime = MPI_Wtime();
         if (size % nproc == 0) {
             for (int i = 0; i < nproc; i++) {
+                printf("Problem!!! %d", i);
                 MPI_Send(&rangeLength, 1, MPI_INT, i, 1, MPI_COMM_WORLD);
             }
         }
@@ -112,20 +113,20 @@ void mulMatVec(double *matrix, double *vec, size_t size, double *res) {
     printf("Data has sent to root process from process #%d\n", rank);
 
     if (rank == 0) {
-        rangeLength = (int) size / nproc;
+        rangeLength = size / nproc;
         if (size % nproc == 0) {
             for (int process = 0; process < nproc; process++) {
-                MPI_Recv(res + process * (int) size / nproc,
+                MPI_Recv(res + process * size / nproc,
                          rangeLength, MPI_DOUBLE, process, 2, MPI_COMM_WORLD, &status);
             }
         }
         else {
             for (int process = 0; process < nproc - 1; process++) {
-                MPI_Recv(res + process * (int) size / nproc,
+                MPI_Recv(res + process * size / nproc,
                          rangeLength, MPI_DOUBLE, process, 2, MPI_COMM_WORLD, &status);
             }
             rangeLength += (int) size - rangeLength * nproc;
-            MPI_Recv(res + (nproc - 1) * (int) size / nproc,
+            MPI_Recv(res + (nproc - 1) * size / nproc,
                      rangeLength, MPI_DOUBLE, nproc - 1, 2, MPI_COMM_WORLD, &status);
         }
         printf("Data has recieved from process #%d\n", rank);
@@ -133,27 +134,27 @@ void mulMatVec(double *matrix, double *vec, size_t size, double *res) {
 //        endtime = MPI_Wtime();
 //        printf("Time taken: %lf", (endtime - starttime));
         for (int process = 0; process < nproc; process++) {
-            MPI_Send(res, (int) size, MPI_DOUBLE, process, 3, MPI_COMM_WORLD);
+            MPI_Send(res, size, MPI_DOUBLE, process, 3, MPI_COMM_WORLD);
         }
         printf("Result vector has sent to all processes\n");
     }
-    MPI_Recv(res, (int) size, MPI_DOUBLE, ROOT, 3, MPI_COMM_WORLD, &status);
+    MPI_Recv(res, size, MPI_DOUBLE, ROOT, 3, MPI_COMM_WORLD, &status);
     printf("Result vector has received from root process to process #%d\n", rank);
 }
 
-void subVectors(double *a, double *b, size_t size) {
+void subVectors(double *a, double *b, int size) {
     for (size_t i = 0; i < size; i++) {
         a[i] = a[i] - b[i];
     }
 }
 
-void mulNumVec(double num, double *vec, size_t size) {
+void mulNumVec(double num, double *vec, int size) {
     for (size_t i = 0; i < size; i++) {
         vec[i] = num * vec[i];
     }
 }
 
-void singleIterate(double *A, double *x, double *b, size_t size) {
+void singleIterate(double *A, double *x, double *b, int size) {
     double *res = (double *) malloc(size * sizeof(double));
 
     int erCode = MPI_Init(NULL, NULL);
@@ -205,7 +206,7 @@ int main(int argc, char *argv[]) {
 //    size_t N = strtoul(argv[1], &end, 10);
 //    double epsilon = strtod(argv[2], &end);
 
-    size_t N = 10;
+    int N = 10;
 
     double *A = (double *) malloc(N * N * sizeof(double));
     initMatrix(A, N);
