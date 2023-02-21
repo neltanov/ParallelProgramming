@@ -122,9 +122,9 @@ int main(void) {
     MPI_Comm_size(MPI_COMM_WORLD, &size);
 
     double start_time, end_time;
-    int m_size = 100;
+    int m_size = 10;
 
-    double *partOfMatrix = (double *) malloc(m_size * m_size / size * sizeof(double));
+    double *part_of_matrix = (double *) malloc(m_size * m_size / size * sizeof(double));
     double *right_part = (double *) malloc(m_size * sizeof(double));
     init_right_part(right_part, m_size);
     double *solution = (double *) calloc(m_size, sizeof(double));
@@ -136,10 +136,10 @@ int main(void) {
     }
 
     MPI_Scatter(matrix, m_size * m_size / size, MPI_DOUBLE,
-                partOfMatrix, m_size * m_size / size, MPI_DOUBLE,
+                part_of_matrix, m_size * m_size / size, MPI_DOUBLE,
                 ROOT, MPI_COMM_WORLD);
 
-    single_iterate(partOfMatrix, solution, right_part, m_size);
+    single_iterate(part_of_matrix, solution, right_part, m_size);
 
     if (rank == ROOT) {
         print_solution(solution, m_size);
@@ -147,7 +147,7 @@ int main(void) {
         printf("Time: %0.6lf\n", end_time - start_time);
     }
     MPI_Finalize();
-    free(partOfMatrix);
+    free(part_of_matrix);
     free(matrix);
     free(right_part);
     free(solution);
