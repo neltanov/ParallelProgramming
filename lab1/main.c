@@ -102,10 +102,13 @@ void singleIterate(double *A, double *x, double *b, int size) {
 
     int rank;
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
-    while (euclideanNorm(res, size) / euclideanNorm(b, size) >= EPS) {
-        printf("Euclidean norm in process #%d: %0.14lf\n", rank, euclideanNorm(res, size) / euclideanNorm(b, size));
+
+    double criteria = 1;
+    while (criteria >= EPS) {
+        printf("Euclidean norm in process #%d: %0.16lf\n", rank, euclideanNorm(res, size) / euclideanNorm(b, size));
         mulMatVec(A, x, size, res);
         subVectors(res, b, size);
+        criteria = euclideanNorm(res, size) / euclideanNorm(b, size);
         mulNumVec(TAU, res, size);
         subVectors(x,res, size);
     }
@@ -123,7 +126,7 @@ int main(int argc, char *argv[]) {
 //    int N = atoi(argv[1]);
 //    double epsilon = strtod(argv[2], &end);
 
-    int N = 28000;
+    int N = 26000;
 
     double *A = (double *) malloc(N * N * sizeof(double));
     initMatrix(A, N);
