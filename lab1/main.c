@@ -91,7 +91,7 @@ void single_iterate(double *part_of_matrix, double *solution, double *b, int vec
         sub_vectors(result_vector, b, vec_size);
     }
 
-    double criteria;
+    double criteria = 1;
     while (criteria >= EPS) {
         mul_mat_vec(part_of_matrix, solution, vec_size,
                     vec_size / size, part_of_result_vector);
@@ -99,14 +99,17 @@ void single_iterate(double *part_of_matrix, double *solution, double *b, int vec
                    result_vector, vec_size * vec_size / size, MPI_DOUBLE,
                    ROOT, MPI_COMM_WORLD);
         if (rank == ROOT) {
+            printf("saldf");
             sub_vectors(result_vector, b, vec_size);
+            criteria = euclidean_norm(result_vector, vec_size) / euclidean_norm(b, vec_size);
             mul_num_vec(TAU, result_vector, vec_size);
             sub_vectors(solution, result_vector, vec_size);
-            criteria = euclidean_norm(result_vector, vec_size) / euclidean_norm(b, vec_size);
         }
         MPI_Bcast(&criteria, 1, MPI_DOUBLE, ROOT, MPI_COMM_WORLD);
     }
-    free(result_vector);
+    if (rank == ROOT) {
+        free(result_vector);
+    }
     free(part_of_result_vector);
 }
 
@@ -123,7 +126,6 @@ int main(void) {
 
     double start_time, end_time;
     int m_size = 10;
-
     double *part_of_matrix = (double *) malloc(m_size * m_size / size * sizeof(double));
     double *right_part = (double *) malloc(m_size * sizeof(double));
     init_right_part(right_part, m_size);
@@ -145,11 +147,12 @@ int main(void) {
         print_solution(solution, m_size);
         end_time = MPI_Wtime();
         printf("Time: %0.6lf\n", end_time - start_time);
+        free(matrix);
     }
-    MPI_Finalize();
     free(part_of_matrix);
-    free(matrix);
     free(right_part);
     free(solution);
+    MPI_Finalize();
+    printf("Success!");
     return 0;
 }
