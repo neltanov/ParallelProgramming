@@ -121,12 +121,17 @@ int main(int argc, char *argv[]) {
         printf("Startup error, execution stopped\n");
         MPI_Abort(MPI_COMM_WORLD, erCode);
     }
+    int rank;
+    MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+
     double start_time, end_time;
-    start_time = MPI_Wtime();
+    if (rank == ROOT) {
+        start_time = MPI_Wtime();
+    }
 //    int N = atoi(argv[1]);
 //    double epsilon = strtod(argv[2], &end);
 
-    int N = 26000;
+    int N = 10000;
 
     double *A = (double *) malloc(N * N * sizeof(double));
     initMatrix(A, N);
@@ -135,8 +140,6 @@ int main(int argc, char *argv[]) {
     double *x = (double *) calloc(N, sizeof(double));
 
     singleIterate(A, x, b, N);
-    int rank;
-    MPI_Comm_rank(MPI_COMM_WORLD, &rank);
     if (rank == ROOT) {
         printArray(x, N);
     }
@@ -144,8 +147,10 @@ int main(int argc, char *argv[]) {
     free(b);
     free(x);
 
-    end_time = MPI_Wtime();
-    printf("Time: %0.2lf\n", end_time - start_time);
+    if (rank == ROOT) {
+        end_time = MPI_Wtime();
+        printf("Time: %0.2lf\n", end_time - start_time);
+    }
     MPI_Finalize();
     return 0;
 }
