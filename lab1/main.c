@@ -25,7 +25,7 @@ void init_right_part(double *array, int size) {
     }
 }
 
-void print_matrix(double *matrix, int rows, int cols) {
+void print_matrix(const double *matrix, int rows, int cols) {
     for (int i = 0; i < rows; i++) {
         for (int j = 0; j < cols; j++) {
             printf("%0.3lf ", matrix[i * cols + j]);
@@ -34,21 +34,22 @@ void print_matrix(double *matrix, int rows, int cols) {
     }
 }
 
-void print_array(double *array, int size) {
+void print_array(const double *array, int size) {
     for (int i = 0; i < size; i++) {
         printf("%0.3f ", array[i]);
     }
     printf("\n");
 }
 
-double euclidean_norm(double *vec, int size) {
+double euclidean_norm(const double *vec, int size) {
     double res = 0;
     for (int i = 0; i < size; i++)
         res += vec[i] * vec[i];
     return sqrt(res);
 }
 
-void mul_mat_vec(double *matrix, double *vector, int rows, int cols, double *result_vector) {
+void mul_mat_vec(const double *matrix, const double *vector,
+                 int rows, int cols, double *result_vector) {
     for (int i = 0; i < rows; i++) {
         for (int j = 0; j < cols; j++) {
             result_vector[i] += matrix[i * rows + j] * vector[j];
@@ -56,7 +57,7 @@ void mul_mat_vec(double *matrix, double *vector, int rows, int cols, double *res
     }
 }
 
-void sub_vectors(double *a, double *b, int size) {
+void sub_vectors(double *a, double const *b, int size) {
     for (int i = 0; i < size; i++) {
         a[i] = a[i] - b[i];
     }
@@ -80,6 +81,7 @@ void single_iterate(double *part_of_matrix, double *solution, double *b, int m_s
     }
 
     double criteria = 1;
+    double euclidean_norm_b = euclidean_norm(b, m_size);
     int i = 0; // for debugging
     while (criteria >= EPS) {
         printf("norm in process #%d: %.16lf\n", rank, criteria);
@@ -93,7 +95,7 @@ void single_iterate(double *part_of_matrix, double *solution, double *b, int m_s
 
         if (rank == ROOT) {
             sub_vectors(result_vector, b, m_size);
-            criteria = euclidean_norm(result_vector, m_size) / euclidean_norm(b, m_size);
+            criteria = euclidean_norm(result_vector, m_size) / euclidean_norm_b;
 //            printf("norm %lf\n", euclidean_norm(b, m_size));
             mul_num_vec(TAU, result_vector, m_size);
             sub_vectors(solution, result_vector, m_size);
