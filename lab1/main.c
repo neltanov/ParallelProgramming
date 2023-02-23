@@ -51,6 +51,7 @@ double euclidean_norm(const double *vec, int size) {
 void mul_mat_vec(const double *matrix, const double *vector,
                  int rows, int cols, double *result_vector) {
     for (int i = 0; i < rows; i++) {
+        result_vector[i] = 0;
         for (int j = 0; j < cols; j++) {
             result_vector[i] += matrix[i * rows + j] * vector[j];
         }
@@ -74,7 +75,7 @@ void single_iterate(double *part_of_matrix, double *solution, double *b, int m_s
     MPI_Comm_size(MPI_COMM_WORLD, &size);
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
 
-    double *part_of_result_vector = (double *) malloc((m_size / size) * sizeof(double));
+    double *part_of_result_vector = (double *) malloc(m_size / size * sizeof(double));
     double *result_vector;
     if (rank == ROOT) {
         result_vector = (double *) malloc(m_size * sizeof(double));
@@ -82,12 +83,10 @@ void single_iterate(double *part_of_matrix, double *solution, double *b, int m_s
 
     double criteria = 1;
     double euclidean_norm_b = euclidean_norm(b, m_size);
-    int i = 0; // for debugging
+
     while (criteria >= EPS) {
-        printf("norm in process #%d: %.16lf\n", rank, criteria);
-        mul_mat_vec(part_of_matrix, solution, m_size,
-                    m_size / size, part_of_result_vector);
-//        print_array(part_of_result_vector, m_size / size);
+        mul_mat_vec(part_of_matrix, solution, m_size / size,
+                    m_size, part_of_result_vector);
 
         MPI_Gather(part_of_result_vector, m_size / size, MPI_DOUBLE,
                    result_vector, m_size / size, MPI_DOUBLE,
@@ -96,7 +95,7 @@ void single_iterate(double *part_of_matrix, double *solution, double *b, int m_s
         if (rank == ROOT) {
             sub_vectors(result_vector, b, m_size);
             criteria = euclidean_norm(result_vector, m_size) / euclidean_norm_b;
-//            printf("norm %lf\n", euclidean_norm(b, m_size));
+            printf("Criteria: %.16lf\n", criteria);
             mul_num_vec(TAU, result_vector, m_size);
             sub_vectors(solution, result_vector, m_size);
         }
@@ -105,10 +104,6 @@ void single_iterate(double *part_of_matrix, double *solution, double *b, int m_s
         MPI_Scatter(result_vector, m_size / size, MPI_DOUBLE,
                     part_of_result_vector, m_size / size, MPI_DOUBLE,
                     ROOT, MPI_COMM_WORLD);
-
-        // debug
-//        if (i == 1) { break; }
-//        i++;
     }
     if (rank == ROOT) {
         free(result_vector);
@@ -128,7 +123,7 @@ int main(void) {
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
 
     double start_time, end_time;
-    int m_size = 8;
+    int m_size = 100;
     double *part_of_matrix = (double *) calloc(m_size * (m_size / size), sizeof(double));
     double *right_part = (double *) malloc(m_size * sizeof(double));
     init_right_part(right_part, m_size);
@@ -147,9 +142,9 @@ int main(void) {
     single_iterate(part_of_matrix, solution, right_part, m_size);
 
     if (rank == ROOT) {
-//        print_array(solution, m_size);
+        print_array(solution, m_size);
         end_time = MPI_Wtime();
-//        printf("Time: %0.6lf\n", end_time - start_time);
+        printf("Time: %0.6lf\n", end_time - start_time);
         free(matrix);
     }
     free(part_of_matrix);
