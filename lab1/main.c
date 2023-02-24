@@ -151,9 +151,9 @@ void single_iterate(double *part_of_matrix, double *solution, double *b, int m_s
                 for (int i = 0; i < m_size / size; i++) {
                     part_of_result_vector[i] = result_vector[i];
                 }
-                for (int i = 1; i < size - 1; i++) {
-                    MPI_Send(result_vector + i * (m_size / size), m_size / size, MPI_DOUBLE,
-                             i, 4, MPI_COMM_WORLD);
+                for (int process = 1; process < size - 1; process++) {
+                    MPI_Send(result_vector + process * (m_size / size), m_size / size, MPI_DOUBLE,
+                             process, 4, MPI_COMM_WORLD);
                 }
                 MPI_Send(result_vector + (size - 1) * (m_size / size), m_size / size + m_size % size, MPI_DOUBLE,
                          size - 1, 5, MPI_COMM_WORLD);
@@ -221,9 +221,9 @@ int main(void) {
             for (int i = 0; i < m_size / size * m_size; i++) {
                 part_of_matrix[i] = matrix[i];
             }
-            for (int i = 1; i < size - 1; i++) {
-                MPI_Send(matrix + i * (m_size / size) * m_size, m_size / size * m_size, MPI_DOUBLE,
-                         i, 0, MPI_COMM_WORLD);
+            for (int process = 1; process < size - 1; process++) {
+                MPI_Send(matrix + process * (m_size / size) * m_size, m_size / size * m_size, MPI_DOUBLE,
+                         process, 0, MPI_COMM_WORLD);
             }
             MPI_Send(matrix + (size - 1) * (m_size / size) * m_size, (m_size / size + m_size % size) * m_size, MPI_DOUBLE,
                      size - 1, 1, MPI_COMM_WORLD);
