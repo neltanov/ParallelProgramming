@@ -3,8 +3,8 @@
 #include <mpi.h>
 #include <math.h>
 
-#define EPS 0.0000001
-#define TAU 0.0001
+#define EPS 0.000001
+#define TAU 0.01
 #define ROOT 0
 
 void init_matrix(double *matrix, int matrix_size) {
@@ -183,21 +183,20 @@ int main(void) {
     MPI_Comm_size(MPI_COMM_WORLD, &size);
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
 
-    double start_time = 0, end_time;
-    int m_size = 15;
+    double start_time = 0, end_time = 0;
+    int m_size = 111; // N
 
-    double *right_part = (double *) malloc(m_size * sizeof(double));
-    init_right_part(right_part, m_size);
-    double *solution = (double *) calloc(m_size, sizeof(double));
-    double *matrix = NULL;
+    double *right_part = (double *) malloc(m_size * sizeof(double)); // b
+    init_right_part(right_part, m_size); // b_i = N + 1
+    double *solution = (double *) calloc(m_size, sizeof(double)); // x
+    double *matrix = NULL; // A
     if (rank == ROOT) {
         start_time = MPI_Wtime();
         matrix = (double *) malloc(m_size * m_size * sizeof(double));
         init_matrix(matrix, m_size);
-        print_matrix(matrix, m_size, m_size);
     }
 
-    double *part_of_matrix;
+    double *part_of_matrix; // A_i
     if (m_size % size == 0) {
         part_of_matrix = (double *) calloc(m_size * (m_size / size), sizeof(double));
     }
@@ -245,8 +244,8 @@ int main(void) {
         free(matrix);
     }
     free(part_of_matrix);
-    free(right_part);
     free(solution);
+    free(right_part);
     MPI_Finalize();
     return 0;
 }
