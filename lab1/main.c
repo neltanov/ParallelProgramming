@@ -3,8 +3,8 @@
 #include <mpi.h>
 #include <math.h>
 
-#define EPS 0.000001
-#define TAU 0.01
+#define EPS 0.0000000001
+#define TAU 0.0001
 #define ROOT 0
 
 void init_matrix(double *matrix, int matrix_size) {
@@ -106,9 +106,14 @@ void single_iterate(double *part_of_matrix, double *solution, double *b, int m_s
         }
         else {
             MPI_Status status;
-            mul_mat_vec(part_of_matrix, solution, m_size / size + m_size % size,
-                        m_size, part_of_result_vector);
-
+            if (rank != size - 1) {
+                mul_mat_vec(part_of_matrix, solution, m_size / size,
+                            m_size, part_of_result_vector);
+            }
+            else {
+                mul_mat_vec(part_of_matrix, solution, m_size / size + m_size % size,
+                            m_size, part_of_result_vector);
+            }
             if (rank != ROOT && rank != size - 1) {
                 MPI_Send(part_of_result_vector, m_size / size, MPI_DOUBLE, ROOT, 2, MPI_COMM_WORLD);
             }
@@ -166,10 +171,10 @@ void single_iterate(double *part_of_matrix, double *solution, double *b, int m_s
             }
         }
     }
+    free(part_of_result_vector);
     if (rank == ROOT) {
         free(result_vector);
     }
-    free(part_of_result_vector);
 }
 
 int main(void) {
@@ -184,7 +189,7 @@ int main(void) {
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
 
     double start_time = 0, end_time = 0;
-    int m_size = 111; // N
+    int m_size =16543; // N
 
     double *right_part = (double *) malloc(m_size * sizeof(double)); // b
     init_right_part(right_part, m_size); // b_i = N + 1
