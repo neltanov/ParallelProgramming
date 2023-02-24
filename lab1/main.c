@@ -39,8 +39,7 @@ void print_array(const double *array, int arr_size) {
     for (int i = 0; i < arr_size; i++) {
         if (i != arr_size - 1) {
             printf("%0.3f, ", array[i]);
-        }
-        else {
+        } else {
             printf("%0.3f", array[i]);
         }
     }
@@ -124,7 +123,8 @@ void single_iterate_method(double *part_of_matrix, double *solution, double *b, 
             if (rank != RANK_ROOT && rank != size - 1) {
                 MPI_Send(part_of_result_vector, matrix_size / size, MPI_DOUBLE, RANK_ROOT, 2, MPI_COMM_WORLD);
             } else if (rank == size - 1) {
-                MPI_Send(part_of_result_vector, matrix_size / size + matrix_size % size, MPI_DOUBLE, RANK_ROOT, 3, MPI_COMM_WORLD);
+                MPI_Send(part_of_result_vector, matrix_size / size + matrix_size % size, MPI_DOUBLE, RANK_ROOT, 3,
+                         MPI_COMM_WORLD);
             }
 
             if (rank == RANK_ROOT) {
@@ -135,7 +135,8 @@ void single_iterate_method(double *part_of_matrix, double *solution, double *b, 
                     MPI_Recv(result_vector + i * (matrix_size / size), matrix_size / size, MPI_DOUBLE,
                              i, 2, MPI_COMM_WORLD, &status);
                 }
-                MPI_Recv(result_vector + (size - 1) * (matrix_size / size), matrix_size / size + matrix_size % size, MPI_DOUBLE,
+                MPI_Recv(result_vector + (size - 1) * (matrix_size / size), matrix_size / size + matrix_size % size,
+                         MPI_DOUBLE,
                          size - 1, 3, MPI_COMM_WORLD, &status);
             }
         }
@@ -165,7 +166,8 @@ void single_iterate_method(double *part_of_matrix, double *solution, double *b, 
                     MPI_Send(result_vector + process * (matrix_size / size), matrix_size / size, MPI_DOUBLE,
                              process, 4, MPI_COMM_WORLD);
                 }
-                MPI_Send(result_vector + (size - 1) * (matrix_size / size), matrix_size / size + matrix_size % size, MPI_DOUBLE,
+                MPI_Send(result_vector + (size - 1) * (matrix_size / size), matrix_size / size + matrix_size % size,
+                         MPI_DOUBLE,
                          size - 1, 5, MPI_COMM_WORLD);
             }
             if (rank != RANK_ROOT && rank != size - 1) {
@@ -230,17 +232,21 @@ int main(void) {
                 part_of_matrix[i] = matrix[i];
             }
             for (int process = 1; process < size - 1; process++) {
-                MPI_Send(matrix + process * (matrix_size / size) * matrix_size, matrix_size / size * matrix_size, MPI_DOUBLE,
+                MPI_Send(matrix + process * (matrix_size / size) * matrix_size, matrix_size / size * matrix_size,
+                         MPI_DOUBLE,
                          process, 0, MPI_COMM_WORLD);
             }
-            MPI_Send(matrix + (size - 1) * (matrix_size / size) * matrix_size, (matrix_size / size + matrix_size % size) * matrix_size,
+            MPI_Send(matrix + (size - 1) * (matrix_size / size) * matrix_size,
+                     (matrix_size / size + matrix_size % size) * matrix_size,
                      MPI_DOUBLE,
                      size - 1, 1, MPI_COMM_WORLD);
         }
         if (rank != RANK_ROOT && rank != size - 1) {
-            MPI_Recv(part_of_matrix, matrix_size / size * matrix_size, MPI_DOUBLE, RANK_ROOT, 0, MPI_COMM_WORLD, &status);
+            MPI_Recv(part_of_matrix, matrix_size / size * matrix_size, MPI_DOUBLE, RANK_ROOT, 0, MPI_COMM_WORLD,
+                     &status);
         } else if (rank == size - 1) {
-            MPI_Recv(part_of_matrix, (matrix_size / size + matrix_size % size) * matrix_size, MPI_DOUBLE, RANK_ROOT, 1, MPI_COMM_WORLD,
+            MPI_Recv(part_of_matrix, (matrix_size / size + matrix_size % size) * matrix_size, MPI_DOUBLE, RANK_ROOT, 1,
+                     MPI_COMM_WORLD,
                      &status);
         }
     }
