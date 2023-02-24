@@ -80,7 +80,12 @@ void single_iterate(double *part_of_matrix, double *solution, double *b, int m_s
         part_of_result_vector = (double *) malloc(m_size / size * sizeof(double));
     }
     else {
-        part_of_result_vector = (double *) malloc((m_size / size + m_size % size) * sizeof(double));
+        if (rank == size - 1) {
+            part_of_result_vector = (double *) malloc((m_size / size + m_size % size) * sizeof(double));
+        }
+        else {
+            part_of_result_vector = (double *) malloc(m_size / size * sizeof(double));
+        }
     }
 
     double *result_vector;
@@ -191,7 +196,12 @@ int main(void) {
         part_of_matrix = (double *) calloc(m_size * (m_size / size), sizeof(double));
     }
     else {
-        part_of_matrix = (double *) calloc(m_size * (m_size / size + m_size % size), sizeof(double));
+        if (rank == size - 1) {
+            part_of_matrix = (double *) calloc(m_size * (m_size / size + m_size % size), sizeof(double));
+        }
+        else {
+            part_of_matrix = (double *) calloc(m_size * (m_size / size), sizeof(double));
+        }
     }
 
     if (rank == ROOT) {
