@@ -3,7 +3,7 @@
 #include <mpi.h>
 #include <math.h>
 
-#define N 11 // Number of equations in a system of linear equations.
+#define N 18000 // Number of equations in a system of linear equations.
 #define EPSILON 0.0000000001 // Сonvergence criterion.
 #define TAU 0.0001 // Parameter of the simple iteration method.
 #define RANK_ROOT 0 // Number of root process.
