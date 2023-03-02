@@ -3,7 +3,7 @@
 #include <math.h>
 #include <omp.h>
 
-#define N 20000
+#define N 18000
 #define EPS 0.0000001
 #define TAU 0.00001
 
@@ -43,14 +43,13 @@ void printArray(double *array, int size) {
 
 double euclideanNorm(const double *vec, int size) {
     double res = 0;
-    #pragma omp parallel for
     for (int i = 0; i < size; i++)
         res += vec[i] * vec[i];
     return sqrt(res);
 }
 
 void mulMatVec(const double *matrix, const double *vec, int size, double *res) {
-    #pragma omp parallel for
+#pragma omp parallel for
     for (int i = 0; i < size; i++) {
         res[i] = 0;
         for (int j = 0; j < size; j++) {
@@ -60,14 +59,12 @@ void mulMatVec(const double *matrix, const double *vec, int size, double *res) {
 }
 
 void subVectors(double *a, const double *b, int size) {
-    #pragma omp parallel for
     for (int i = 0; i < size; i++) {
         a[i] = a[i] - b[i];
     }
 }
 
 void mulNumVec(double num, double *vec, int size) {
-    #pragma omp parallel for
     for (int i = 0; i < size; i++) {
         vec[i] = num * vec[i];
     }
@@ -76,7 +73,6 @@ void mulNumVec(double num, double *vec, int size) {
 void singleIterate(double *A, double *x, double *b, int size) {
     double *res = (double *) malloc(size * sizeof(double));
     double criteria = 1;
-
     while (criteria >= EPS) {
         mulMatVec(A, x, size, res);
         subVectors(res, b, size);
@@ -100,6 +96,7 @@ int main(void) {
     double *x = (double *) calloc(m_size, sizeof(double));
 
     singleIterate(A, x, b, m_size);
+
     printArray(x, m_size);
 
     free(A);
