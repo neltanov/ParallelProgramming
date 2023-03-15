@@ -3,7 +3,7 @@
 #include <math.h>
 #include <omp.h>
 
-#define N 18000
+#define N 20000
 #define EPS 0.0000001
 #define TAU 0.00001
 
