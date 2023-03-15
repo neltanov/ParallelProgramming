@@ -50,7 +50,7 @@ double euclidean_norm(const double *vec, int size) {
 }
 
 void mul_mat_vec(const double *matrix, const double *vec, int size, double *res) {
-#pragma omp for
+#pragma omp for schedule(static, 10000)
     for (int i = 0; i < size; i++) {
         res[i] = 0;
         for (int j = 0; j < size; j++) {
