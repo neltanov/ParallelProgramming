@@ -43,7 +43,7 @@ void print_array(double *array, int size) {
 
 double euclidean_norm(const double *vec, int size) {
     double res = 0;
-    #pragma omp parallel for
+    #pragma omp parallel for reduction(+:res)
     for (int i = 0; i < size; i++)
         res += vec[i] * vec[i];
     return sqrt(res);
@@ -76,11 +76,12 @@ void mul_num_vec(double num, double *vec, int size) {
 void single_iterate(double *A, double *x, double *b, int size) {
     double *res = (double *) malloc(size * sizeof(double));
     double criteria = 1;
+    double euclidean_norm_b = euclidean_norm(b, size);
 
     while (criteria >= EPS) {
         mul_mat_vec(A, x, size, res);
         sub_vectors(res, b, size);
-        criteria = euclidean_norm(res, size) / euclidean_norm(b, size);
+        criteria = euclidean_norm(res, size) / euclidean_norm_b;
         printf("norm: %0.15lf\n", criteria);
         mul_num_vec(TAU, res, size);
         sub_vectors(x, res, size);
