@@ -3,8 +3,8 @@
 #PBS -l select=2:ncpus=8:mpiprocs=8:mem=16000m,place=scatter
 #PBS -l walltime=00:02:00
 #PBS -m n
-#PBS -o out-clu-demo.txt
-#PBS -e err-clu-demo.txt
+#PBS -o out.txt
+#PBS -e err.txt
 
 MPI_NP=$(wc -l $PBS_NODEFILE | awk '{ print $1 }')
 
