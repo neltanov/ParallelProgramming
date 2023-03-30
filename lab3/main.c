@@ -44,17 +44,17 @@ int run(int size, int rank) {
 
     const int columns_per_process = N / size;
 
-    int *data0 = NULL;
-    int *data = NULL;
+    double *data0 = NULL;
+    double *data = NULL;
 
     if (RANK_ROOT == rank) {
-        data0 = (int *) calloc(N * N, sizeof(*data));
+        data0 = (double *) calloc(N * N, sizeof(*data));
         mat_fill((Mat) {data0, N, N}, size);
         printf("ROOT:\n");
         mat_print((Mat) {data0, N, N});
     }
 
-    data = (int *) calloc(N * columns_per_process, sizeof(*data));
+    data = (double *) calloc(N * columns_per_process, sizeof(*data));
 
     MPI_Datatype vertical_int_slice;
     MPI_Datatype vertical_int_slice_resized;
@@ -62,7 +62,7 @@ int run(int size, int rank) {
             /* blocks count - number of rows */ N,
             /* block length  */ columns_per_process,
             /* stride - block start offset */ N,
-            /* old type - element type */ MPI_INT,
+            /* old type - element type */ MPI_DOUBLE,
             /* new type */ &vertical_int_slice
     );
     MPI_Type_commit(&vertical_int_slice);
@@ -81,7 +81,7 @@ int run(int size, int rank) {
             /* send data type */ vertical_int_slice_resized,
             /* recv buffer */ data,
             /* number of <recv data type> elements received */ N * columns_per_process,
-            /* recv data type */ MPI_INT,
+            /* recv data type */ MPI_DOUBLE,
                               RANK_ROOT,
                               MPI_COMM_WORLD
     );
@@ -108,24 +108,33 @@ int main(int argc, char **argv) {
 
     // определение размеров решетки: dims
     MPI_Dims_create(size, 2, dims);
-    sizey = dims[0];
-    sizex = dims[1];
+    sizex = dims[0];
+    sizey = dims[1];
 
-    // создание коммуникатора: comm2d
     MPI_Cart_create(MPI_COMM_WORLD, 2, dims, periods, reorder, &comm2d);
-
-    // получение своего номера в comm2d: rank
     MPI_Comm_rank(comm2d, &rank);
-
-    // получение своих координат в двумерной решетке: coords
     MPI_Cart_get(comm2d, 2, dims, periods, coords);
-    ranky = coords[0];
-    rankx = coords[1];
+    rankx = coords[0];
+    ranky = coords[1];
+
+//    if (rank == 2)
+//    printf("%d\n", rank);
 
     // определение номеров соседей: prevy, nexty, prevx, nextx
-    MPI_Cart_shift(comm2d, 0, 1, &prevy, &nexty);
-    MPI_Cart_shift(comm2d, 1, 1, &prevx, &nextx);
+    MPI_Cart_shift(comm2d, 0, 1, &prevx, &nextx);
+    MPI_Cart_shift(comm2d, 1, 1, &prevy, &nexty);
 
+    double *A;
+    double *B;
+
+    if (rank == 0) {
+        int n1 = 10, n2 = 3, n3 = 7;
+        A = malloc(n1 * n2 * sizeof(double));
+        B = malloc(n2 * n3 * sizeof(double));
+        printf("Size of 2d cart: (%d, %d)\n", sizex, sizey);
+        printf("Current process: (%d, %d)\n", rankx, ranky);
+        printf("(%d, %d)\n", nextx, nexty);
+    }
 
 //    const int exit_code = run(size, rank);
 
