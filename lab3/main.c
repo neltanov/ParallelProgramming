@@ -61,23 +61,28 @@ int run(void) {
      * */
 
     int n1 = 11, n2 = 12, n3 = 15;
+
     double *A;
     double *B;
+    double *C;
 
     double *part_A = calloc((n1 / sizey + 1) * n2, sizeof(double));
     double *part_B = calloc(n2 * (n3 / sizex + 1), sizeof(double));
+    double *part_C = calloc((n1 / sizey + 1) * (n3 / sizex + 1), sizeof(double));
+
+    if (RANK_ROOT == rank) {
+        A = malloc(n1 * n2 * sizeof(double));
+        B = malloc(n2 * n3 * sizeof(double));
+        C = malloc(n1 * n3 * sizeof(double));
+
+        fill_matrix(A, n1, n2);
+        fill_matrix(B, n2, n3);
+    }
 
     int *sendcounts = malloc(ord_size * sizeof(int));
 
     int *displs = malloc(ord_size * sizeof(int));
 
-    if (RANK_ROOT == rank) {
-        A = malloc(n1 * n2 * sizeof(double));
-        B = malloc(n2 * n3 * sizeof(double));
-
-        fill_matrix(A, n1, n2);
-        fill_matrix(B, n2, n3);
-    }
     // Подготовка sencounts и displs к подаче в scatterv
     int nmin = n1 / ord_size;
     int nextra = n1 % ord_size;
@@ -146,9 +151,11 @@ int run(void) {
     if (RANK_ROOT == rank) {
         free(A);
         free(B);
+        free(C);
     }
     free(part_A);
     free(part_B);
+    free(part_C);
 
     return EXIT_SUCCESS;
 }
