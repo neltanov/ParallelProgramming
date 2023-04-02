@@ -5,25 +5,19 @@
 
 #define RANK_ROOT 0
 
-typedef struct {
-    double *data;
-    int rows;
-    int cols;
-} Mat;
-
-void mat_fill(Mat mat, int comm_size) {
-    for (int y = 0; y < mat.rows; y += 1) {
-        for (int x = 0; x < mat.cols; x += 1) {
-            mat.data[y * mat.cols + x] = x;
+void fill_matrix(double *matrix, int rows, int cols) {
+    for (int i = 0; i < rows; i++) {
+        for (int j = 0; j < cols; j++) {
+            matrix[i * cols + j] = j;
         }
     }
 }
 
-void mat_print(Mat mat) {
-    for (int i = 0; i < mat.rows * mat.cols; i += 1) {
-        printf("%lf ", mat.data[i]);
+void print_matrix(double *matrix, int rows, int cols) {
+    for (int i = 0; i < rows * cols; i++) {
+        printf("%lf ", matrix[i]);
 
-        if ((i + 1) % mat.cols == 0) {
+        if ((i + 1) % cols == 0) {
             printf("\n");
         }
     }
@@ -41,48 +35,70 @@ int run(void) {
     sizey = dims[1];
 
     MPI_Comm comm2d;
-    MPI_Cart_create(MPI_COMM_WORLD, 2, dims, periods, reorder, &comm2d);
-    MPI_Comm_rank(comm2d, &rank);
-    MPI_Cart_get(comm2d, 2, dims, periods, coords);
+    MPI_Cart_create(MPI_COMM_WORLD, 2, dims, periods, reorder, &comm2d); // создание 2d решетки
+    MPI_Comm_rank(comm2d, &rank); // получение номеров процесса в 2d решетке (старая нумерация)
+    MPI_Cart_get(comm2d, 2, dims, periods, coords); // получение номера процесса в виде координат решетки
     rankx = coords[0];
     ranky = coords[1];
 
     if (RANK_ROOT == rank) {
-        printf("Size of 2d cart: (%d, %d)\n", sizex, sizey);
+        printf("Size of 2d cart: %dx%d\n", sizex, sizey);
     }
 
-    MPI_Comm commOrdinat, commAbsciss;
-    MPI_Comm_split(comm2d, ranky, rankx, &commAbsciss);
-    MPI_Comm_split(comm2d, rankx, ranky, &commOrdinat);
+    MPI_Comm commOrdinate, commAbscissa;
+    MPI_Comm_split(comm2d, ranky, rankx, &commAbscissa);
+    MPI_Comm_split(comm2d, rankx, ranky, &commOrdinate);
 
     int ord_size, ord_rank, abs_size, abs_rank;
-    MPI_Comm_size(commOrdinat, &ord_size);
-    MPI_Comm_size(commAbsciss, &abs_size);
+    MPI_Comm_size(commOrdinate, &ord_size);
+    MPI_Comm_size(commAbscissa, &abs_size);
+    MPI_Comm_rank(commAbscissa, &abs_rank);
+    MPI_Comm_rank(commOrdinate, &ord_rank);
 
-    /*
+    /* Вот такая решетка получается:
      * (0;1) (1;1) (2;1) (3;1) (4;1)
      * (0;0) (1;0) (2;0) (3;0) (4;0)
      * */
 
-    double *dataA = NULL;
-    double *dataB = NULL;
-    double *data = NULL;
+    int n1 = 11, n2 = 12, n3 = 15;
+    double *A;
+    double *B;
+
+    double *part_A = calloc((n1 / sizey + 1) * n2, sizeof(double));
+    double *part_B = calloc(n2 * (n3 / sizex + 1), sizeof(double));
+
+    int *sendcounts = malloc(ord_size * sizeof(int));
+
+    int *displs = malloc(ord_size * sizeof(int));
 
     if (RANK_ROOT == rank) {
-        int n1 = 10, n2 = 12, n3 = 15;
+        A = malloc(n1 * n2 * sizeof(double));
+        B = malloc(n2 * n3 * sizeof(double));
 
-        dataA = (double *) calloc(n1 * n2, sizeof(*dataA));
-        Mat A = {dataA, n1, n2};
-
-        dataB = (double *) calloc(n2 * n3, sizeof(*dataB));
-        Mat B = {dataB, n2, n3};
-
-        mat_fill(A, size);
-        mat_fill(B, size);
-
-        mat_print(A);
-        mat_print(B);
+        fill_matrix(A, n1, n2);
+        fill_matrix(B, n2, n3);
     }
+    // Подготовка sencounts и displs к подаче в scatterv
+    int nmin = n1 / ord_size;
+    int nextra = n1 % ord_size;
+    int k = 0;
+    for (int i = 0; i < ord_size; i++) {
+        if (i < nextra) {
+            sendcounts[i] = (nmin + 1) * n2;
+        } else {
+            sendcounts[i] = nmin * n2;
+        }
+        displs[i] = k;
+        k += sendcounts[i];
+    }
+
+    MPI_Scatterv(A, sendcounts, displs, MPI_DOUBLE, part_A, (n1 / ord_size + 1) * n2, MPI_DOUBLE, RANK_ROOT, commOrdinate);
+    if (rankx == 0) {
+        sleep(ranky);
+        print_matrix(part_A, n1 / ord_size + 1, n2);
+        printf("\n");
+    }
+
 
 //    const int N = 9;
 //    const int columns_per_process = N / size;
@@ -126,8 +142,14 @@ int run(void) {
 //    MPI_Type_free(&vertical_int_slice_resized);
 //    MPI_Type_free(&vertical_int_slice);
 //    free(data);
-    free(dataA);
-    free(dataB);
+
+    if (RANK_ROOT == rank) {
+        free(A);
+        free(B);
+    }
+    free(part_A);
+    free(part_B);
+
     return EXIT_SUCCESS;
 }
 
