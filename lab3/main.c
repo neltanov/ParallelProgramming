@@ -97,56 +97,54 @@ int run(void) {
         k += sendcounts[i];
     }
 
-    MPI_Scatterv(A, sendcounts, displs, MPI_DOUBLE, part_A, (n1 / ord_size + 1) * n2, MPI_DOUBLE, RANK_ROOT, commOrdinate);
-    if (rankx == 0) {
+    MPI_Scatterv(A, sendcounts, displs, MPI_DOUBLE,
+                 part_A, (n1 / ord_size + 1) * n2, MPI_DOUBLE, RANK_ROOT, commOrdinate);
+
+    if (RANK_ROOT == rankx) {
         sleep(ranky);
         print_matrix(part_A, n1 / ord_size + 1, n2);
         printf("\n");
     }
 
+    const int columns_per_process = n3 / sizex + 1;
 
-//    const int N = 9;
-//    const int columns_per_process = N / size;
+    MPI_Datatype vertical_int_slice;
+    MPI_Datatype vertical_int_slice_resized;
+    MPI_Type_vector(
+            /* blocks count - number of rows */ n2,
+            /* block length  */ columns_per_process,
+            /* stride - block start offset */ n2,
+            /* old type - element type */ MPI_DOUBLE,
+            /* new type */ &vertical_int_slice
+    );
+    MPI_Type_commit(&vertical_int_slice);
 
-//    data = (double *) calloc(N * columns_per_process, sizeof(*data));
-//
-//    MPI_Datatype vertical_int_slice;
-//    MPI_Datatype vertical_int_slice_resized;
-//    MPI_Type_vector(
-//            /* blocks count - number of rows */ N,
-//            /* block length  */ columns_per_process,
-//            /* stride - block start offset */ N,
-//            /* old type - element type */ MPI_DOUBLE,
-//            /* new type */ &vertical_int_slice
-//    );
-//    MPI_Type_commit(&vertical_int_slice);
-//
-//    MPI_Type_create_resized(
-//            vertical_int_slice,
-//            /* lower bound */ 0,
-//            /* extent - size in bytes */ (int) (columns_per_process * sizeof(*data)),
-//            /* new type */ &vertical_int_slice_resized
-//    );
-//    MPI_Type_commit(&vertical_int_slice_resized);
-//
-//    MPI_Scatter(
-//            /* send buffer */ dataA,
-//            /* number of <send data type> elements sent */ 1,
-//            /* send data type */ vertical_int_slice_resized,
-//            /* recv buffer */ data,
-//            /* number of <recv data type> elements received */ N * columns_per_process,
-//            /* recv data type */ MPI_DOUBLE,
-//                              RANK_ROOT,
-//                              MPI_COMM_WORLD
-//    );
-//
-//    sleep(1 + rank);
-//    printf("RANK %d:\n", rank);
-//    mat_print((Mat) {data, .rows = N, .cols = columns_per_process});
-//
-//    MPI_Type_free(&vertical_int_slice_resized);
-//    MPI_Type_free(&vertical_int_slice);
-//    free(data);
+    MPI_Type_create_resized(
+            vertical_int_slice,
+            /* lower bound */ 0,
+            /* extent - size in bytes */ (int) (columns_per_process * sizeof(double)),
+            /* new type */ &vertical_int_slice_resized
+    );
+
+    MPI_Type_commit(&vertical_int_slice_resized);
+
+    MPI_Scatter(
+            /* send buffer */ B,
+            /* number of <send data type> elements sent */ 1,
+            /* send data type */ vertical_int_slice_resized,
+            /* recv buffer */ part_B,
+            /* number of <recv data type> elements received */ n2 * columns_per_process,
+            /* recv data type */ MPI_DOUBLE,
+                              RANK_ROOT,
+                              commAbscissa
+    );
+
+    sleep(1 + rank);
+    printf("RANK %d:\n", rank);
+    print_matrix(part_B, n2, n3 / sizex + 1);
+
+    MPI_Type_free(&vertical_int_slice_resized);
+    MPI_Type_free(&vertical_int_slice);
 
     if (RANK_ROOT == rank) {
         free(A);
