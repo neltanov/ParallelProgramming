@@ -48,17 +48,6 @@ int run(void) {
     MPI_Comm_split(comm2d, ranky, rankx, &commAbscissa);
     MPI_Comm_split(comm2d, rankx, ranky, &commOrdinate);
 
-    int ord_size, ord_rank, abs_size, abs_rank;
-    MPI_Comm_size(commOrdinate, &ord_size);
-    MPI_Comm_size(commAbscissa, &abs_size);
-    MPI_Comm_rank(commAbscissa, &abs_rank);
-    MPI_Comm_rank(commOrdinate, &ord_rank);
-
-    /* Вот такая решетка получается:
-     * (0;1) (1;1) (2;1) (3;1) (4;1)
-     * (0;0) (1;0) (2;0) (3;0) (4;0)
-     * */
-
     int n1 = 11, n2 = 12, n3 = 16;
 
     double *A = NULL;
@@ -68,8 +57,8 @@ int run(void) {
     double *part_A = calloc((n1 / sizey + 1) * n2, sizeof(double));
     double *part_B = calloc(n2 * (n3 / sizex), sizeof(double));
     double *part_C = calloc((n1 / sizey + 1) * (n3 / sizex), sizeof(double));
+
     if (RANK_ROOT == rank) {
-        printf("(%d,%d)\n", rankx, ranky);
         A = calloc(n1 * n2, sizeof(double));
         B = calloc(n2 * n3, sizeof(double));
         C = calloc(n1 * n3, sizeof(double));
@@ -79,14 +68,14 @@ int run(void) {
         print_matrix(A, n1, n2);
         printf("\n");
     }
-    int *sendcounts = malloc(ord_size * sizeof(int));
-    int *displs = malloc(ord_size * sizeof(int));
+    int *sendcounts = malloc(sizey * sizeof(int));
+    int *displs = malloc(sizey * sizeof(int));
 
     // Подготовка sencounts и displs к подаче в scatterv
-    int nmin = n1 / ord_size;
-    int nextra = n1 % ord_size;
+    int nmin = n1 / sizey;
+    int nextra = n1 % sizey;
     int k = 0;
-    for (int i = 0; i < ord_size; i++) {
+    for (int i = 0; i < sizey; i++) {
         if (i < nextra) {
             sendcounts[i] = (nmin + 1) * n2;
         } else {
@@ -98,11 +87,15 @@ int run(void) {
 
     if (RANK_ROOT == rankx) {
         MPI_Scatterv(A, sendcounts, displs, MPI_DOUBLE,
-                     part_A, (n1 / ord_size + 1) * n2, MPI_DOUBLE, RANK_ROOT, commOrdinate);
-        sleep(1 + ranky);
-        print_matrix(part_A, n1 / ord_size + 1, n2);
-        printf("\n");
+                     part_A, (n1 / sizey + 1) * n2, MPI_DOUBLE, RANK_ROOT, commOrdinate);
     }
+
+    MPI_Bcast(part_A, (n1 / sizey + 1) * n2, MPI_DOUBLE, RANK_ROOT, commAbscissa);
+
+    sleep(rank);
+    printf("RANK: (%d, %d)\n", rankx, ranky);
+    print_matrix(part_A, n1 / sizey + 1, n2);
+    printf("\n");
 
     const int columns_per_process = n3 / sizex;
 
@@ -126,6 +119,7 @@ int run(void) {
     );
 
     MPI_Type_commit(&vertical_double_slice_resized);
+
     if (RANK_ROOT == ranky) {
         MPI_Scatter(
                 /* send buffer */ B,
@@ -138,12 +132,12 @@ int run(void) {
                                   commAbscissa
         );
     }
+    MPI_Bcast(part_B, n2 * columns_per_process, MPI_DOUBLE, RANK_ROOT, commOrdinate);
 
-    if (RANK_ROOT == ranky) {
-        sleep(1 + rank);
-        printf("\nRANK (%d,%d):\n", rankx, ranky);
-        print_matrix(part_B, n2, n3 / sizex);
-    }
+    sleep(size + rank);
+    printf("RANK: (%d, %d)\n", rankx, ranky);
+    print_matrix(part_B, n2, columns_per_process);
+    printf("\n");
 
     MPI_Type_free(&vertical_double_slice_resized);
     MPI_Type_free(&vertical_double_slice);
