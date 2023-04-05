@@ -15,10 +15,21 @@ void fill_matrix(double *matrix, int rows, int cols) {
 
 void print_matrix(double *matrix, int rows, int cols) {
     for (int i = 0; i < rows * cols; i++) {
-        printf("%lf ", matrix[i]);
+        printf("%0.2lf ", matrix[i]);
 
         if ((i + 1) % cols == 0) {
             printf("\n");
+        }
+    }
+}
+
+void multiply_matrices(const double *A, const double *B, double *C, int n1, int n2, int n3) {
+    for (int i = 0; i < n1; i++) {
+        for (int j = 0; j < n3; j++) {
+            C[i * n3 + j] = 0;
+            for (int k = 0; k < n2; k++) {
+                C[i * n3 + j] += A[i * n2 + k] * B[k * n3 + j];
+            }
         }
     }
 }
@@ -48,7 +59,11 @@ int run(void) {
     MPI_Comm_split(comm2d, ranky, rankx, &commAbscissa);
     MPI_Comm_split(comm2d, rankx, ranky, &commOrdinate);
 
-    int n1 = 11, n2 = 12, n3 = 16;
+    int n1 = 7, n2 = 4, n3 = 4;
+    if (n3 % sizex != 0) {
+        printf("%d mod %d != 0", n3, sizex);
+        return 0;
+    }
 
     double *A = NULL;
     double *B = NULL;
@@ -66,6 +81,8 @@ int run(void) {
         fill_matrix(A, n1, n2);
         fill_matrix(B, n2, n3);
         print_matrix(A, n1, n2);
+        printf("\n");
+        print_matrix(B, n2, n3);
         printf("\n");
     }
     int *sendcounts = malloc(sizey * sizeof(int));
@@ -85,16 +102,18 @@ int run(void) {
         k += sendcounts[i];
     }
 
+    const int rows_per_process = n1 / sizey + 1;
+
     if (RANK_ROOT == rankx) {
         MPI_Scatterv(A, sendcounts, displs, MPI_DOUBLE,
-                     part_A, (n1 / sizey + 1) * n2, MPI_DOUBLE, RANK_ROOT, commOrdinate);
+                     part_A, rows_per_process * n2, MPI_DOUBLE, RANK_ROOT, commOrdinate);
     }
 
-    MPI_Bcast(part_A, (n1 / sizey + 1) * n2, MPI_DOUBLE, RANK_ROOT, commAbscissa);
+    MPI_Bcast(part_A, rows_per_process * n2, MPI_DOUBLE, RANK_ROOT, commAbscissa);
 
     sleep(rank);
     printf("RANK: (%d, %d)\n", rankx, ranky);
-    print_matrix(part_A, n1 / sizey + 1, n2);
+    print_matrix(part_A, rows_per_process, n2);
     printf("\n");
 
     const int columns_per_process = n3 / sizex;
@@ -137,6 +156,17 @@ int run(void) {
     sleep(size + rank);
     printf("RANK: (%d, %d)\n", rankx, ranky);
     print_matrix(part_B, n2, columns_per_process);
+    printf("\n");
+
+    sleep(rank);
+    multiply_matrices(part_A, part_B, part_C, rows_per_process - 1, n2, columns_per_process);
+
+    if (RANK_ROOT == rank) {
+        printf("%d, %d, %d\n", rows_per_process, n2, columns_per_process);
+    }
+    sleep(2 * size + rank);
+    printf("RANK: (%d, %d)\n", rankx, ranky);
+    print_matrix(part_C, rows_per_process, columns_per_process);
     printf("\n");
 
     MPI_Type_free(&vertical_double_slice_resized);
