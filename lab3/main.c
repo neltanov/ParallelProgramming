@@ -68,9 +68,12 @@ int run(void) {
     double *B = NULL;
     double *C = NULL;
 
-    double *part_A = calloc((n1 / sizey + 1) * n2, sizeof(double));
-    double *part_B = calloc(n2 * (n3 / sizex), sizeof(double));
-    double *part_C = calloc((n1 / sizey + 1) * (n3 / sizex), sizeof(double));
+    const int rows_per_process = n1 / sizey;
+    const int columns_per_process = n3 / sizex;
+
+    double *part_A = calloc(rows_per_process * n2, sizeof(double));
+    double *part_B = calloc(n2 * columns_per_process, sizeof(double));
+    double *part_C = calloc(rows_per_process * columns_per_process, sizeof(double));
 
     if (RANK_ROOT == rank) {
         A = calloc(n1 * n2, sizeof(double));
@@ -84,64 +87,44 @@ int run(void) {
         print_matrix(B, n2, n3);
         printf("\n");
     }
-    int *sendcounts = malloc(sizey * sizeof(int));
-    int *displs = malloc(sizey * sizeof(int));
-
-    // Подготовка sencounts и displs к подаче в scatterv
-    int nmin = n1 / sizey;
-    int nextra = n1 % sizey;
-    int k = 0;
-    for (int i = 0; i < sizey; i++) {
-        if (i < nextra) {
-            sendcounts[i] = (nmin + 1) * n2;
-        } else {
-            sendcounts[i] = nmin * n2;
-        }
-        displs[i] = k;
-        k += sendcounts[i];
-    }
-
-    const int rows_per_process = n1 / sizey + 1;
 
     if (RANK_ROOT == rankx) {
-        MPI_Scatterv(A, sendcounts, displs, MPI_DOUBLE,
+        MPI_Scatter(A, rows_per_process * n2, MPI_DOUBLE,
                      part_A, rows_per_process * n2, MPI_DOUBLE, RANK_ROOT, commOrdinate);
     }
 
     MPI_Bcast(part_A, rows_per_process * n2, MPI_DOUBLE, RANK_ROOT, commAbscissa);
 
-    sleep(rank);
-    printf("Part of matrix A. Rank: (%d, %d)\n", rankx, ranky);
-    print_matrix(part_A, rows_per_process, n2);
-    printf("\n");
+//    sleep(rank);
+//    printf("Part of matrix A. Rank: (%d, %d)\n", rankx, ranky);
+//    print_matrix(part_A, rows_per_process, n2);
+//    printf("\n");
 
-    const int columns_per_process = n3 / sizex;
 
-    MPI_Datatype vertical_double_slice;
-    MPI_Datatype vertical_double_slice_resized;
-
+    MPI_Datatype vertical_slice;
     MPI_Type_vector(
             /* blocks count - number of rows */ n2,
             /* block length  */ columns_per_process,
             /* stride - block start offset */ n3,
             /* old type - element type */ MPI_DOUBLE,
-            /* new type */ &vertical_double_slice
+            /* new type */ &vertical_slice
     );
-    MPI_Type_commit(&vertical_double_slice);
+    MPI_Type_commit(&vertical_slice);
 
+    MPI_Datatype vertical_slice_resized;
     MPI_Type_create_resized(
-            vertical_double_slice,
+            vertical_slice,
             /* lower bound */ 0,
             /* extent - size in bytes */ (int) (columns_per_process * sizeof(double)),
-            /* new type */ &vertical_double_slice_resized
+            /* new type */ &vertical_slice_resized
     );
-    MPI_Type_commit(&vertical_double_slice_resized);
+    MPI_Type_commit(&vertical_slice_resized);
 
     if (RANK_ROOT == ranky) {
         MPI_Scatter(
                 /* send buffer */ B,
                 /* number of <send data type> elements sent */ 1,
-                /* send data type */ vertical_double_slice_resized,
+                /* send data type */ vertical_slice_resized,
                 /* recv buffer */ part_B,
                 /* number of <recv data type> elements received */ n2 * columns_per_process,
                 /* recv data type */ MPI_DOUBLE,
@@ -151,47 +134,63 @@ int run(void) {
     }
     MPI_Bcast(part_B, n2 * columns_per_process, MPI_DOUBLE, RANK_ROOT, commOrdinate);
 
-    sleep(size + rank);
-    printf("Part of matrix B. Rank: (%d, %d)\n", rankx, ranky);
-    print_matrix(part_B, n2, columns_per_process);
-    printf("\n");
-
-    sleep(rank);
+//    sleep(size + rank);
+//    printf("Part of matrix B. Rank: (%d, %d)\n", rankx, ranky);
+//    print_matrix(part_B, n2, columns_per_process);
+//    printf("\n");
+//
+//    sleep(rank);
     multiply_matrices(part_A, part_B, part_C, rows_per_process, n2, columns_per_process);
 
-    sleep(2 * size + rank);
-    printf("Part of matrix C. Rank: (%d, %d)\n", rankx, ranky);
-    print_matrix(part_C, rows_per_process, columns_per_process);
-    printf("\n");
+//    sleep(2 * size + rank);
+//    printf("Part of matrix C. Rank: (%d, %d)\n", rankx, ranky);
+//    print_matrix(part_C, rows_per_process, columns_per_process);
+//    printf("\n");
 
-//    MPI_Datatype matrix_block;
-//    MPI_Datatype matrix_block_resized;
-//
-//    MPI_Type_vector(
-//            /* blocks count - number of rows */ rows_per_process,
-//            /* block length  */ columns_per_process,
-//            /* stride - block start offset */ n3,
-//            /* old type - element type */ MPI_DOUBLE,
-//            /* new type */ &matrix_block
-//    );
-//    MPI_Type_commit(&matrix_block);
-//
-//    MPI_Type_create_resized(
-//            matrix_block,
-//            /* lower bound */ 0,
-//            /* extent - size in bytes */ (int) (columns_per_process * sizeof(double)),
-//            /* new type */ &matrix_block_resized
-//    );
-//    MPI_Type_commit(&matrix_block_resized);
-//
-//    MPI_Gather(part_C, 1, matrix_block_resized, C, (n1 / sizey + 1) * (n3 / sizex), MPI_DOUBLE, RANK_ROOT, comm2d);
-//
-//    MPI_Type_free(&matrix_block);
-//    MPI_Type_free(&matrix_block_resized);
-    MPI_Type_free(&vertical_double_slice_resized);
-    MPI_Type_free(&vertical_double_slice);
+    MPI_Datatype matrix_block;
+    MPI_Datatype matrix_block_resized;
+
+    MPI_Type_vector(
+            /* blocks count - number of rows */ rows_per_process,
+            /* block length  */ columns_per_process,
+            /* stride - block start offset */ n3,
+            /* old type - element type */ MPI_DOUBLE,
+            /* new type */ &matrix_block
+    );
+    MPI_Type_commit(&matrix_block);
+
+    MPI_Type_create_resized(
+            matrix_block,
+            /* lower bound */ 0,
+            /* extent - size in bytes */ (int) (columns_per_process * sizeof(double)),
+            /* new type */ &matrix_block_resized
+    );
+    MPI_Type_commit(&matrix_block_resized);
+
+    int *sendcounts;
+    int *displs;
+    if (rank == RANK_ROOT) {
+        sendcounts = malloc(sizex * sizey * sizeof(int));
+        displs = malloc(sizex * sizey * sizeof(int));
+        for (int i = 0; i < sizex * sizey; i++) {
+            sendcounts[i] = 1;
+        }
+        for (int i = 0; i < sizex * sizey; i++) {
+            displs[i] = sizex * ranky * rows_per_process + rankx;
+        }
+    }
+
+    MPI_Gatherv(part_C, rows_per_process * columns_per_process, MPI_DOUBLE,
+                C, sendcounts, displs, matrix_block_resized, RANK_ROOT, comm2d);
+
+    MPI_Type_free(&matrix_block);
+    MPI_Type_free(&matrix_block_resized);
+
+    MPI_Type_free(&vertical_slice_resized);
+    MPI_Type_free(&vertical_slice);
 
     if (RANK_ROOT == rank) {
+        print_matrix(C, n1, n3);
         free(A);
         free(B);
         free(C);
