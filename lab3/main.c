@@ -58,7 +58,7 @@ int run(void) {
     MPI_Comm_split(comm2d, ranky, rankx, &commAbscissa);
     MPI_Comm_split(comm2d, rankx, ranky, &commOrdinate);
 
-    int n1 = 7, n2 = 4, n3 = 4;
+    int n1 = 4, n2 = 4, n3 = 6;
     if (n3 % sizex != 0) {
         printf("%d mod %d != 0", n3, sizex);
         return 1;
@@ -172,11 +172,14 @@ int run(void) {
     if (rank == RANK_ROOT) {
         sendcounts = malloc(sizex * sizey * sizeof(int));
         displs = malloc(sizex * sizey * sizeof(int));
+
         for (int i = 0; i < sizex * sizey; i++) {
             sendcounts[i] = 1;
         }
-        for (int i = 0; i < sizex * sizey; i++) {
-            displs[i] = sizex * ranky * rows_per_process + rankx;
+        for (int i = 0; i < sizey; i++) {
+            for (int j = 0; j < sizex; j++) {
+                displs[j * sizex + i] = sizex * i * rows_per_process + j;
+            }
         }
     }
 
