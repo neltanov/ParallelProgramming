@@ -17,7 +17,6 @@ void fill_matrix(double *matrix, int rows, int cols) {
 void print_matrix(double *matrix, int rows, int cols) {
     for (int i = 0; i < rows * cols; i++) {
         printf("%0.2lf ", matrix[i]);
-
         if ((i + 1) % cols == 0) {
             printf("\n");
         }
@@ -54,15 +53,15 @@ int run(void) {
     rankx = coords[0];
     ranky = coords[1];
 
-    if (RANK_ROOT == rank) {
-        printf("Size of 2d cart: %dx%d\n", sizex, sizey);
-    }
+//    if (RANK_ROOT == rank) {
+//        printf("Size of 2d cart: %dx%d\n", sizex, sizey);
+//    }
 
     MPI_Comm commOrdinate, commAbscissa;
     MPI_Comm_split(comm2d, ranky, rankx, &commAbscissa);
     MPI_Comm_split(comm2d, rankx, ranky, &commOrdinate);
 
-    int n1 = 100, n2 = 100, n3 = 100;
+    int n1 = 1000, n2 = 1000, n3 = 1000;
     if (n1 % sizey != 0 || n3 % sizex != 0) {
         printf("%d mod %d != 0", n3, sizex);
         return 1;
@@ -82,10 +81,10 @@ int run(void) {
 
         fill_matrix(A, n1, n2);
         fill_matrix(B, n2, n3);
-        print_matrix(A, n1, n2);
-        printf("\n");
-        print_matrix(B, n2, n3);
-        printf("\n");
+//        print_matrix(A, n1, n2);
+//        printf("\n");
+//        print_matrix(B, n2, n3);
+//        printf("\n");
     }
 
     double *part_A = calloc(rows_per_process * n2, sizeof(double));
@@ -152,7 +151,7 @@ int run(void) {
     MPI_Type_free(&vertical_slice);
 
     if (RANK_ROOT == rank) {
-        print_matrix(C, n1, n3);
+//        print_matrix(C, n1, n3);
         free(A);
         free(B);
         free(C);
@@ -163,7 +162,7 @@ int run(void) {
 
     const double end_time_s = MPI_Wtime();
     if (RANK_ROOT == rank) {
-        printf("Time taken: %lf", end_time_s - start_time_s);
+        printf("Time taken: %lf sec", end_time_s - start_time_s);
     }
 
     return EXIT_SUCCESS;
