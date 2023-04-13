@@ -6,6 +6,10 @@
 #define RANK_ROOT 0
 #define LOWER_BOUND 0
 
+#define N1 1000
+#define N2 1000
+#define N3 1000
+
 void fill_matrix(double *matrix, int rows, int cols) {
     for (int i = 0; i < rows; i++) {
         for (int j = 0; j < cols; j++) {
@@ -39,40 +43,11 @@ int run(void) {
     MPI_Comm_size(MPI_COMM_WORLD, &size);
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
 
-    const double start_time_s = MPI_Wtime();
-
-    int dims[2] = {0, 0}, periods[2] = {0, 0}, coords[2], reorder = 1;
-
-    MPI_Dims_create(size, 2, dims);
-    sizex = dims[0];
-    sizey = dims[1];
-
-    MPI_Comm comm2d;
-    MPI_Cart_create(MPI_COMM_WORLD, 2, dims, periods, reorder, &comm2d);
-    MPI_Cart_get(comm2d, 2, dims, periods, coords);
-    rankx = coords[0];
-    ranky = coords[1];
-
-//    if (RANK_ROOT == rank) {
-//        printf("Size of 2d cart: %dx%d\n", sizex, sizey);
-//    }
-
-    MPI_Comm commOrdinate, commAbscissa;
-    MPI_Comm_split(comm2d, ranky, rankx, &commAbscissa);
-    MPI_Comm_split(comm2d, rankx, ranky, &commOrdinate);
-
-    int n1 = 1000, n2 = 1000, n3 = 1000;
-    if (n1 % sizey != 0 || n3 % sizex != 0) {
-        printf("%d mod %d != 0", n3, sizex);
-        return 1;
-    }
+    int n1 = N1, n2 = N2, n3 = N3;
 
     double *A = NULL;
     double *B = NULL;
     double *C = NULL;
-
-    const int rows_per_process = n1 / sizey;
-    const int columns_per_process = n3 / sizex;
 
     if (RANK_ROOT == rank) {
         A = calloc(n1 * n2, sizeof(double));
@@ -87,6 +62,34 @@ int run(void) {
 //        printf("\n");
     }
 
+    const double start_time_s = MPI_Wtime();
+
+    int dims[2] = {0, 0}, periods[2] = {0, 0}, coords[2], reorder = 1;
+
+    MPI_Dims_create(size, 2, dims);
+
+    MPI_Comm comm2d;
+    MPI_Cart_create(MPI_COMM_WORLD, 2, dims, periods, reorder, &comm2d);
+    MPI_Cart_get(comm2d, 2, dims, periods, coords);
+
+    sizex = dims[0];
+    sizey = dims[1];
+
+    rankx = coords[0];
+    ranky = coords[1];
+
+    MPI_Comm commOrdinate, commAbscissa;
+    MPI_Comm_split(comm2d, ranky, rankx, &commAbscissa);
+    MPI_Comm_split(comm2d, rankx, ranky, &commOrdinate);
+
+    if (n1 % sizey != 0 || n3 % sizex != 0) {
+        printf("%d mod %d != 0", n3, sizex);
+        return 1;
+    }
+
+    const int rows_per_process = n1 / sizey;
+    const int columns_per_process = n3 / sizex;
+
     double *part_A = calloc(rows_per_process * n2, sizeof(double));
     double *part_B = calloc(n2 * columns_per_process, sizeof(double));
     double *part_C = calloc(rows_per_process * columns_per_process, sizeof(double));
@@ -95,7 +98,6 @@ int run(void) {
         MPI_Scatter(A, rows_per_process * n2, MPI_DOUBLE,
                      part_A, rows_per_process * n2, MPI_DOUBLE, RANK_ROOT, commOrdinate);
     }
-
     MPI_Bcast(part_A, rows_per_process * n2, MPI_DOUBLE, RANK_ROOT, commAbscissa);
 
     MPI_Datatype vertical_slice;
