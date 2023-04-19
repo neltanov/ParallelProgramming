@@ -1,7 +1,3 @@
-lab1/cmake-build-debug/
-lab1/.idea/
-lab2/cmake-build-debug/
-lab2/.idea/
-lab3/cmake-build-debug/
-lab3/.idea/
+*/cmake-build-debug/
+*/.idea/
 clu_pw.txt
