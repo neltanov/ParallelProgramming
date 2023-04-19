@@ -6,9 +6,9 @@
 #define RANK_ROOT 0
 #define LOWER_BOUND 0
 
-#define N1 3200
-#define N2 4000
-#define N3 2000
+#define N1 500
+#define N2 500
+#define N3 500
 
 void fill_matrix(double *matrix, int rows, int cols) {
     for (int i = 0; i < rows; i++) {
@@ -117,7 +117,6 @@ int run(void) {
 
     multiply_matrices(part_A, part_B, part_C, rows_per_process, n2, columns_per_process);
 
-
     MPI_Datatype matrix_block;
     MPI_Type_vector(rows_per_process, columns_per_process, n3, MPI_DOUBLE, &matrix_block);
     MPI_Type_commit(&matrix_block);
@@ -127,17 +126,20 @@ int run(void) {
                             (int) (columns_per_process * sizeof(double)), &matrix_block_resized);
     MPI_Type_commit(&matrix_block_resized);
 
-    int *sendcounts;
-    int *displs;
-    sendcounts = malloc(sizex * sizey * sizeof(int));
-    displs = malloc(sizex * sizey * sizeof(int));
+    int *sendcounts = NULL;
+    int *displs = NULL;
 
-    for (int i = 0; i < sizex * sizey; i++) {
-        sendcounts[i] = 1;
-    }
-    for (int i = 0; i < sizey; i++) {
-        for (int j = 0; j < sizex; j++) {
-            displs[j * sizex + i] = sizex * i * rows_per_process + j;
+    if (RANK_ROOT == rank) {
+        sendcounts = malloc(sizex * sizey * sizeof(int));
+        displs = malloc(sizex * sizey * sizeof(int));
+
+        for (int i = 0; i < sizex * sizey; i++) {
+            sendcounts[i] = 1;
+        }
+        for (int i = 0; i < sizey; i++) {
+            for (int j = 0; j < sizex; j++) {
+                displs[j * sizex + i] = sizex * i * rows_per_process + j;
+            }
         }
     }
 
@@ -155,7 +157,10 @@ int run(void) {
         free(A);
         free(B);
         free(C);
+        free(sendcounts);
+        free(displs);
     }
+
     free(part_A);
     free(part_B);
     free(part_C);
