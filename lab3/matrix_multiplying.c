@@ -6,9 +6,9 @@
 #define RANK_ROOT 0
 #define LOWER_BOUND 0
 
-#define N1 1000
-#define N2 1000
-#define N3 1000
+#define N1 3200
+#define N2 4000
+#define N3 2000
 
 void fill_matrix(double *matrix, int rows, int cols) {
     for (int i = 0; i < rows; i++) {
@@ -96,7 +96,7 @@ int run(void) {
 
     if (RANK_ROOT == rankx) {
         MPI_Scatter(A, rows_per_process * n2, MPI_DOUBLE,
-                     part_A, rows_per_process * n2, MPI_DOUBLE, RANK_ROOT, commOrdinate);
+                    part_A, rows_per_process * n2, MPI_DOUBLE, RANK_ROOT, commOrdinate);
     }
     MPI_Bcast(part_A, rows_per_process * n2, MPI_DOUBLE, RANK_ROOT, commAbscissa);
 
@@ -129,17 +129,15 @@ int run(void) {
 
     int *sendcounts;
     int *displs;
-    if (rank == RANK_ROOT) {
-        sendcounts = malloc(sizex * sizey * sizeof(int));
-        displs = malloc(sizex * sizey * sizeof(int));
+    sendcounts = malloc(sizex * sizey * sizeof(int));
+    displs = malloc(sizex * sizey * sizeof(int));
 
-        for (int i = 0; i < sizex * sizey; i++) {
-            sendcounts[i] = 1;
-        }
-        for (int i = 0; i < sizey; i++) {
-            for (int j = 0; j < sizex; j++) {
-                displs[j * sizex + i] = sizex * i * rows_per_process + j;
-            }
+    for (int i = 0; i < sizex * sizey; i++) {
+        sendcounts[i] = 1;
+    }
+    for (int i = 0; i < sizey; i++) {
+        for (int j = 0; j < sizex; j++) {
+            displs[j * sizex + i] = sizex * i * rows_per_process + j;
         }
     }
 
@@ -164,7 +162,7 @@ int run(void) {
 
     const double end_time_s = MPI_Wtime();
     if (RANK_ROOT == rank) {
-        printf("Time taken: %lf sec", end_time_s - start_time_s);
+        printf("Time taken: %lf sec\n", end_time_s - start_time_s);
     }
 
     return EXIT_SUCCESS;
