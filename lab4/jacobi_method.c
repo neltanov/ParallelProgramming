@@ -6,7 +6,7 @@
 
 
 typedef struct {
-    float * Values;
+    float *Values;
     int N;
     float X0;
     float Y0;
@@ -16,24 +16,20 @@ typedef struct {
     int UpperEdge;
 } Grid2D;
 
-typedef float (* Function)(
+typedef float (*Function)(
         float x,
         float y);
 
-typedef float (* GridFunction)(
+typedef float (*GridFunction)(
         Grid2D grid,
         int i,
         int j);
 
 
-Grid2D grid_new(
-        int size,
-        float x0,
-        float y0,
-        float real_size) {
+Grid2D grid_new(int size, float x0, float y0, float real_size) {
     assert(size >= 1 && "Size must be >= 1");
 
-    float * const data = (float *) calloc(size * size, sizeof(*data));
+    float *const data = (float *) calloc(size * size, sizeof(*data));
 
     return (Grid2D) {
             .Values = data,
@@ -48,7 +44,7 @@ Grid2D grid_new(
 
 
 Grid2D grid_copy(Grid2D grid) {
-    float * const data = (float *) calloc(grid.N * grid.N, sizeof(*data));
+    float *const data = (float *) calloc(grid.N * grid.N, sizeof(*data));
     memcpy(data, grid.Values, sizeof(*data) * grid.N * grid.N);
 
     Grid2D copy = grid;
@@ -63,24 +59,17 @@ void grid_free(Grid2D grid) {
 }
 
 
-float * grid_at(
-        Grid2D grid,
-        int i,
-        int j) {
+float *grid_at(Grid2D grid, int i, int j) {
     return &grid.Values[j * grid.N + i];
 }
 
 
-float grid_index_to_x(
-        Grid2D grid,
-        int i) {
+float grid_index_to_x(Grid2D grid, int i) {
     return grid.X0 + grid.D * (float) i / (float) (grid.N - 1);
 }
 
 
-float grid_index_to_y(
-        Grid2D grid,
-        int j) {
+float grid_index_to_y(Grid2D grid, int j) {
     return grid.Y0 + grid.D * (float) j / (float) (grid.N - 1);
 }
 
@@ -96,9 +85,7 @@ void grid_print(Grid2D grid) {
 }
 
 
-float grid_max_diff(
-        Grid2D grid,
-        Function target) {
+float grid_max_diff(Grid2D grid, Function target) {
     float delta = 0.0f;
 
     for (int j = 0; j < grid.N; j += 1) {
@@ -115,25 +102,19 @@ float grid_max_diff(
 }
 
 
-void grid_swap(
-        Grid2D * g1,
-        Grid2D * g2) {
+void grid_swap(Grid2D *g1, Grid2D *g2) {
     Grid2D tmp = *g1;
     *g1 = *g2;
     *g2 = tmp;
 }
 
 
-float phi(
-        float x,
-        float y) {
+float phi(float x, float y) {
     return x * x + y * y;
 }
 
 
-void fill_edges(
-        Grid2D grid,
-        Function target_fn) {
+void fill_edges(Grid2D grid, Function target_fn) {
     float x, y;
     for (int i = 0; i < grid.N; i += 1) {
         x = grid_index_to_x(grid, i);
@@ -149,10 +130,7 @@ void fill_edges(
 }
 
 
-void solve(
-        Grid2D grid,
-        GridFunction grid_approximation,
-        float target_delta) {
+void solve(Grid2D grid, GridFunction grid_approximation, float target_delta) {
     float iter_delta = INFINITY;
     int n_iter = 0;
 
@@ -197,10 +175,7 @@ void solve(
 }
 
 
-float approximate_value(
-        Grid2D grid,
-        int i,
-        int j) {
+float approximate_value(Grid2D grid, int i, int j) {
     const float x = grid_index_to_x(grid, i);
     const float y = grid_index_to_y(grid, j);
     const float a = 1e5f;
