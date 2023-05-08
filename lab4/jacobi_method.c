@@ -1,214 +1,235 @@
 #include <stdio.h>
 #include <stdlib.h>
-#include <assert.h>
-#include <math.h>
 #include <string.h>
+#include <math.h>
+#include <float.h>
+#include <mpi.h>
 
+#define N 320
+#define a 10e5
+#define epsilon 10e-8
+#define idx(i, j, k) (N * N * i + N * j + k)
 
-typedef struct {
-    float *Values;
-    int N;
-    float X0;
-    float Y0;
-    float D;
+#define D_X 2
+#define D_Y 2
+#define D_Z 2
 
-    int LowerEdge;
-    int UpperEdge;
-} Grid2D;
+#define X_0 (-1)
+#define Y_0 (-1)
+#define Z_0 (-1)
 
-typedef float (*Function)(
-        float x,
-        float y);
+int size = 0;
+int rank = 0;
 
-typedef float (*GridFunction)(
-        Grid2D grid,
-        int i,
-        int j);
+const double H_X = D_X / (double) (N - 1);
+const double H_Y = D_Y / (double) (N - 1);
+const double H_Z = D_Z / (double) (N - 1);
 
+double H_X2 = H_X * H_X;
+double H_Y2 = H_Y * H_Y;
+double H_Z2 = H_Z * H_Z;
 
-Grid2D grid_new(int size, float x0, float y0, float real_size) {
-    assert(size >= 1 && "Size must be >= 1");
-
-    float *const data = (float *) calloc(size * size, sizeof(*data));
-
-    return (Grid2D) {
-            .Values = data,
-            .N = size,
-            .X0 = x0,
-            .Y0 = y0,
-            .D = real_size,
-            .LowerEdge = 0,
-            .UpperEdge = size - 1,
-    };
+double phi(double x, double y, double z) {
+    return x * x + y * y + z * z;
 }
 
-
-Grid2D grid_copy(Grid2D grid) {
-    float *const data = (float *) calloc(grid.N * grid.N, sizeof(*data));
-    memcpy(data, grid.Values, sizeof(*data) * grid.N * grid.N);
-
-    Grid2D copy = grid;
-    copy.Values = data;
-
-    return copy;
+double rho(double x, double y, double z) {
+    return 6 - a * phi(x, y, z);
 }
 
-
-void grid_free(Grid2D grid) {
-    free(grid.Values);
+double X(int i) {
+    return X_0 + i * H_X;
 }
 
-
-float *grid_at(Grid2D grid, int i, int j) {
-    return &grid.Values[j * grid.N + i];
+double Y(int j) {
+    return Y_0 + j * H_Y;
 }
 
-
-float grid_index_to_x(Grid2D grid, int i) {
-    return grid.X0 + grid.D * (float) i / (float) (grid.N - 1);
+double Z(int k) {
+    return Z_0 + k * H_Z;
 }
 
+void init_phi(int layer_height, double *current_layer) {
+    for (int i = 0; i < layer_height + 2; i++) {
+        int relative_Z = i + ((rank * layer_height) - 1);
+        double z = Z(relative_Z);
 
-float grid_index_to_y(Grid2D grid, int j) {
-    return grid.Y0 + grid.D * (float) j / (float) (grid.N - 1);
-}
+        for (int j = 0; j < N; j++) {
+            double x = X(j);
 
+            for (int k = 0; k < N; k++) {
+                double y = Y(k);
 
-void grid_print(Grid2D grid) {
-    for (int j = 0; j < grid.N; j += 1) {
-        for (int i = 0; i < grid.N; i += 1) {
-            printf("%.2f ", *grid_at(grid, i, j));
-        }
+                if (k != 0 && k != N - 1 &&
+                    j != 0 && j != N - 1 &&
+                    z != Z_0 && z != Z_0 + D_Z) {
+                    current_layer[idx(i, j, k)] = 0;
+                } else {
+                    current_layer[idx(i, j, k)] = phi(x, y, z);
+                }
 
-        printf("\n");
-    }
-}
-
-
-float grid_max_diff(Grid2D grid, Function target) {
-    float delta = 0.0f;
-
-    for (int j = 0; j < grid.N; j += 1) {
-        for (int i = 0; i < grid.N; i += 1) {
-            const float x = grid_index_to_x(grid, i);
-            const float y = grid_index_to_y(grid, j);
-            const float current_delta = fabsf(target(x, y) - *grid_at(grid, i, j));
-
-            delta = fmaxf(delta, current_delta);
-        }
-    }
-
-    return delta;
-}
-
-
-void grid_swap(Grid2D *g1, Grid2D *g2) {
-    Grid2D tmp = *g1;
-    *g1 = *g2;
-    *g2 = tmp;
-}
-
-
-float phi(float x, float y) {
-    return x * x + y * y;
-}
-
-
-void fill_edges(Grid2D grid, Function target_fn) {
-    float x, y;
-    for (int i = 0; i < grid.N; i += 1) {
-        x = grid_index_to_x(grid, i);
-
-        *grid_at(grid, i, grid.LowerEdge) = target_fn(x, grid_index_to_y(grid, grid.LowerEdge));
-        *grid_at(grid, i, grid.UpperEdge) = target_fn(x, grid_index_to_y(grid, grid.UpperEdge));
-
-        y = grid_index_to_y(grid, i);
-
-        *grid_at(grid, grid.LowerEdge, i) = target_fn(grid_index_to_x(grid, grid.LowerEdge), y);
-        *grid_at(grid, grid.UpperEdge, i) = target_fn(grid_index_to_x(grid, grid.UpperEdge), y);
-    }
-}
-
-
-void solve(Grid2D grid, GridFunction grid_approximation, float target_delta) {
-    float iter_delta = INFINITY;
-    int n_iter = 0;
-
-    Grid2D next = grid_copy(grid);
-
-    while (iter_delta > target_delta && n_iter < 20) {
-#ifdef PRINT_ITER
-        printf("n_iter = %d\niter_delta = %.8f\n", n_iter, iter_delta);
-        grid_print(grid);
-        printf("\n");
-#endif // PRINT_ITER
-        iter_delta = 0;
-
-        for (int j = grid.LowerEdge + 1; j <= grid.UpperEdge - 1; j += 1) {
-            for (int i = grid.LowerEdge + 1; i <= grid.UpperEdge - 1; i += 1) {
-                const float old_value = *grid_at(grid, i, j);
-                const float new_value = grid_approximation(grid, i, j);
-                // printf("[%d, %d] %.2f -> %.2f\n",i, j, old_value, new_value);
-                *grid_at(next, i, j) = new_value;
-
-                const float current_delta = fabsf(new_value - old_value);
-                iter_delta = fmaxf(iter_delta, current_delta);
             }
         }
-
-        grid_swap(&next, &grid);
-
-        n_iter += 1;
-        printf("n_iter = %d\n", n_iter);
     }
-
-    if (n_iter % 2 != 0) {
-        grid_swap(&grid, &next);
-    }
-    grid_free(next);
-
-#ifdef PRINT_ITER
-    printf("DONE\nn_iter = %d\niter_delta = %.8f\n", n_iter, iter_delta);
-    grid_print(grid);
-    printf("\n");
-#endif // PRINT_ITER
 }
 
-
-float approximate_value(Grid2D grid, int i, int j) {
-    const float x = grid_index_to_x(grid, i);
-    const float y = grid_index_to_y(grid, j);
-    const float a = 1e5f;
-
-    const float h = grid.D / (float) (grid.N - 1);
-    const float hx_sq = h * h;
-    const float hy_sq = h * h;
-
-    const float C = 1.0f / (a + 2.0f / hx_sq + 2.0f / hy_sq);
-    const float x_part = (*grid_at(grid, i - 1, j) + *grid_at(grid, i + 1, j)) / hx_sq;
-    const float y_part = (*grid_at(grid, i, j - 1) + *grid_at(grid, i, j + 1)) / hy_sq;
-    const float rho = 6 - a * phi(x, y);
-
-    return C * (x_part + y_part - rho);
+void print_cube(double *A) {
+    for (int i = 0; i < N; i++) {
+        for (int j = 0; j < N; j++) {
+            for (int k = 0; k < N; k++) {
+                printf(" %7.4f", A[idx(i, j, k)]);
+            }
+            printf(";");
+        }
+        printf("\n");
+    }
 }
 
+double calc_delta(double *omega) {
+    double deltaMax = DBL_MIN;
+    double x, y, z;
+    for (int i = 0; i < N; i++) {
+        x = X(i);
+        for (int j = 0; j < N; j++) {
+            y = Y(j);
+            for (int k = 0; k < N; k++) {
+                z = Z(k);
+                deltaMax = fmax(deltaMax, fabs(omega[idx(i, j, k)] - phi(x, y, z)));
+            }
+        }
+    }
 
-int main(void) {
-    const float eps = 1e-8f;
+    return deltaMax;
+}
 
-    const int grid_size = 51;
-    const float grid_min = -1.0f;
-    const float grid_real_size = 2.0f;
+double update_layer(int relative_Z_coordinate, int layer_idx, double *current_layer, double *current_layer_buf) {
+    int absolute_Z_coordinate = relative_Z_coordinate + layer_idx; // во всей омега
+    double delta_max = DBL_MIN;
+    double x, y, z;
 
-    Grid2D grid = grid_new(grid_size, grid_min, grid_min, grid_real_size);
+    if (absolute_Z_coordinate == 0 || absolute_Z_coordinate == N - 1) {
+        memcpy(current_layer_buf + layer_idx * N * N, current_layer + layer_idx * N * N, N * N * sizeof(double));
+        delta_max = 0;
+    } else {
+        z = Z(absolute_Z_coordinate);
 
-    Function target_fn = phi;
-    fill_edges(grid, target_fn);
-    solve(grid, approximate_value, eps);
+        for (int i = 0; i < N; i++) {
+            x = X(i);
+            for (int j = 0; j < N; j++) {
+                y = Y(j);
 
-    printf("max_delta = %.8f\n", grid_max_diff(grid, target_fn));
+                if (i == 0 || i == N - 1 || j == 0 || j == N - 1) {
+                    current_layer_buf[idx(layer_idx, i, j)] = current_layer[idx(layer_idx, i, j)];
+                } else {
+                    current_layer_buf[idx(layer_idx, i, j)] =
+                            ((current_layer[idx(layer_idx + 1, i, j)] + current_layer[idx(layer_idx - 1, i, j)]) / H_Z2 +
+                             (current_layer[idx(layer_idx, i + 1, j)] + current_layer[idx(layer_idx, i - 1, j)]) / H_X2 +
+                             (current_layer[idx(layer_idx, i, j + 1)] + current_layer[idx(layer_idx, i, j - 1)]) / H_Y2 -
+                             rho(x, y, z)) / (2 / H_X2 + 2 / H_Y2 + 2 / H_Z2 + a);
 
-    grid_free(grid);
+                    if (fabs(current_layer_buf[idx(layer_idx, i, j)] - current_layer[idx(layer_idx, i, j)]) > delta_max) {
+                        delta_max = current_layer_buf[idx(layer_idx, i, j)] - current_layer[idx(layer_idx, i, j)];
+                    }
 
-    return EXIT_SUCCESS;
+                }
+            }
+        }
+    }
+
+    return delta_max;
+}
+
+int main(int argc, char *argv[]) {
+    MPI_Init(&argc, &argv);
+    MPI_Comm_size(MPI_COMM_WORLD, &size);
+    MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+    MPI_Request req[4];
+
+    if (N % size && rank == 0) {
+        printf("Grid size %d should be a multiple of the ProcNum\n", N);
+        return 0;
+    }
+
+    double *omega;
+
+    double global_max_delta = DBL_MAX;
+
+    int layer_size = N / size;
+    int layer_Z_coordinate = rank * layer_size - 1;
+
+    int extended_layer_size = (layer_size + 2) * N * N;
+    double *current_layer = malloc(extended_layer_size * sizeof(double));
+    double *current_layer_buf = malloc(extended_layer_size * sizeof(double));
+
+    init_phi(layer_size, current_layer);
+
+    double start_time_s = MPI_Wtime();
+    do {
+        double proc_max_delta = DBL_MIN;
+        double tmp_max_delta;
+
+        if (rank != 0) {
+            MPI_Isend(current_layer_buf + N * N, N * N, MPI_DOUBLE,
+                      rank - 1, 888, MPI_COMM_WORLD, &req[1]);
+
+            MPI_Irecv(current_layer_buf, N * N, MPI_DOUBLE,
+                      rank - 1, 888, MPI_COMM_WORLD, &req[0]);
+        }
+
+        if (rank != size - 1) {
+            MPI_Isend(current_layer_buf + N * N * layer_size, N * N, MPI_DOUBLE,
+                      rank + 1, 888, MPI_COMM_WORLD, &req[3]);
+
+            MPI_Irecv(current_layer_buf + N * N * (layer_size + 1), N * N, MPI_DOUBLE,
+                      rank + 1, 888, MPI_COMM_WORLD, &req[2]);
+        }
+
+        for (int layer_idx = 2; layer_idx < layer_size; layer_idx++) {
+            tmp_max_delta = update_layer(layer_Z_coordinate, layer_idx, current_layer, current_layer_buf);
+            proc_max_delta = fmax(proc_max_delta, tmp_max_delta);
+        }
+
+        if (rank != size - 1) {
+            MPI_Wait(&req[2], MPI_STATUS_IGNORE);
+            MPI_Wait(&req[3], MPI_STATUS_IGNORE);
+        }
+
+        if (rank != 0) {
+            MPI_Wait(&req[0], MPI_STATUS_IGNORE);
+            MPI_Wait(&req[1], MPI_STATUS_IGNORE);
+        }
+
+        tmp_max_delta = update_layer(layer_Z_coordinate, 1, current_layer, current_layer_buf);
+        proc_max_delta = fmax(proc_max_delta, tmp_max_delta);
+
+        tmp_max_delta = update_layer(layer_Z_coordinate, layer_size, current_layer, current_layer_buf);
+        proc_max_delta = fmax(proc_max_delta, tmp_max_delta);
+
+        memcpy(current_layer, current_layer_buf, extended_layer_size * sizeof(double));
+
+        MPI_Allreduce(&proc_max_delta, &global_max_delta, 1, MPI_DOUBLE, MPI_MAX, MPI_COMM_WORLD);
+
+    } while (global_max_delta > epsilon);
+
+    free(current_layer_buf);
+
+    double end_time_s = MPI_Wtime();
+
+    if (rank == 0) {
+        omega = malloc(N * N * N * sizeof(double));
+    }
+
+    MPI_Gather(current_layer + N * N, layer_size * N * N, MPI_DOUBLE, omega,
+               layer_size * N * N, MPI_DOUBLE, 0, MPI_COMM_WORLD);
+
+    if (rank == 0) {
+        printf("Time taken: %lf s\n", end_time_s - start_time_s);
+        printf("Delta: %lf", calc_delta(omega));
+        free(omega);
+    }
+
+    free(current_layer);
+
+    MPI_Finalize();
+    return 0;
 }
