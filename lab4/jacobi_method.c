@@ -87,16 +87,16 @@ void print_elements(double *A) {
     }
 }
 
-double calculate_layer_values(int relative_Z_coordinate, int layer_idx, double *current_layer, double *current_layer_buf) {
-    int absolute_Z_coordinate = relative_Z_coordinate + layer_idx;
+double calculate_layer_values(int relative_z, int layer_idx, double *current_layer, double *current_layer_buf) {
+    int absolute_Z = relative_z + layer_idx;
     double delta_max = DBL_MIN;
     double x, y, z;
 
-    if (absolute_Z_coordinate == 0 || absolute_Z_coordinate == N - 1) {
+    if (absolute_Z == 0 || absolute_Z == N - 1) {
         memcpy(current_layer_buf + layer_idx * N * N, current_layer + layer_idx * N * N, N * N * sizeof(double));
         delta_max = 0;
     } else {
-        z = Z(absolute_Z_coordinate);
+        z = Z(absolute_Z);
 
         for (int i = 0; i < N; i++) {
             x = X(i);
@@ -147,7 +147,7 @@ int main(int argc, char *argv[]) {
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
     MPI_Request req[4];
 
-    if (N % size && rank == 0) {
+    if (N % size && RANK_ROOT == rank) {
         printf("Grid size %d should be a multiple of the number of processes.\n", N);
         return 0;
     }
@@ -187,8 +187,8 @@ int main(int argc, char *argv[]) {
         }
 
         /* Вычисления на фоне пересылки данных между процессами. */
-        for (int layer_idx = 2; layer_idx < layer_size; layer_idx++) {
-            tmp_max_delta = calculate_layer_values(layer_Z_coordinate, layer_idx, cur_layer, cur_layer_buf);
+        for (int i = 2; i < layer_size; i++) {
+            tmp_max_delta = calculate_layer_values(layer_Z_coordinate, i, cur_layer, cur_layer_buf);
             proc_max_delta = fmax(proc_max_delta, tmp_max_delta);
         }
 
@@ -211,7 +211,6 @@ int main(int argc, char *argv[]) {
         memcpy(cur_layer, cur_layer_buf, extended_layer_size * sizeof(double));
 
         MPI_Allreduce(&proc_max_delta, &global_max_delta, 1, MPI_DOUBLE, MPI_MAX, MPI_COMM_WORLD);
-
     }
 
     free(cur_layer_buf);
