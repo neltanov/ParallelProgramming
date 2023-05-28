@@ -5,62 +5,60 @@
 #include <cstdlib>
 #include <cstring>
 
-#define L 1000
-#define LISTS_COUNT 500
-#define TASK_COUNT 2000
-#define MIN_TASKS_TO_SHARE 2
+constexpr int L = 1000;
+constexpr int LISTS_COUNT = 2;
+constexpr int NUMBER_OF_TASKS = 100;
+constexpr int MIN_SHARING_TASKS = 2;
 
-#define EXECUTOR_FINISHED_WORK (-1)
-#define NO_TASKS_TO_SHARE (-2)
-#define SENDING_TASKS 500
-#define SENDING_TASK_COUNT 500
-
-bool finished_execution = false;
+constexpr int FINISH_SIGNAL = -1;
+constexpr int NO_TASKS = -2;
+constexpr int TASKS_TAG = 2;
+constexpr int TASK_COUNT_TAG = 3;
 
 pthread_mutex_t mutex;
+
 typedef struct {
     int *tasks;
     int remaining_tasks;
     int executed_tasks;
     int additional_tasks;
 } Task_info;
-
 Task_info task_info;
 
+bool finished_execution = false;
 double global_result = 0;
 double summary_disbalance = 0;
 
 void print_tasks(int *task_set, int process_rank) {
-    std::cout << "Process :" << process_rank;
-    for (int i = 0; i < TASK_COUNT; i++) {
+    std::cout << "Process: " << process_rank << std::endl;
+    for (int i = 0; i < NUMBER_OF_TASKS; i++) {
         std::cout << task_set[i] << " ";
     }
+    std::cout << std::endl;
 }
 
-void init_task_set(int *task_set, int task_count, int iter_counter, int process_count, int process_rank) {
+void init_task_set(int *tasks, int task_count, int iter_counter, int process_count, int process_rank) {
     for (int i = 0; i < task_count; i++) {
-        task_set[i] = abs(50 - i % 100) * abs(process_rank - (iter_counter % process_count)) * L;
+        tasks[i] = abs(50 - i % 100) * abs(process_rank - (iter_counter % process_count)) * L;
     }
 }
 
-void execute_task_set(const int *task_set) {
+void execute_tasks(const int *tasks) {
     int i = 0;
     while (true) {
         pthread_mutex_lock(&mutex);
-        if (i == task_info.remaining_tasks) {
+        if (0 == task_info.remaining_tasks) {
             pthread_mutex_unlock(&mutex);
             break;
         }
-        int weight = task_set[i];
-        i++;
+        int weight = tasks[i];
+        task_info.executed_tasks++;
+        task_info.remaining_tasks--;
         pthread_mutex_unlock(&mutex);
 
         for (int j = 0; j < weight; j++) {
             global_result += sqrt(0.00005);
         }
-        pthread_mutex_lock(&mutex);
-        task_info.executed_tasks++;
-        pthread_mutex_unlock(&mutex);
     }
     pthread_mutex_lock(&mutex);
     task_info.remaining_tasks = 0;
@@ -68,93 +66,84 @@ void execute_task_set(const int *task_set) {
 }
 
 void start_executor(int process_count, int process_rank) {
-    task_info.tasks = new int[TASK_COUNT];
+    task_info.tasks = new int[NUMBER_OF_TASKS];
     double start_time, finish_time, iteration_duration, shortest_iteration, longest_iteration, current_disbalance;
+    int total_executed_tasks = 0;
 
     for (int i = 0; i < LISTS_COUNT; i++) {
         start_time = MPI_Wtime();
         MPI_Barrier(MPI_COMM_WORLD);
         std::cout << "Iteration " << i << ". Initializing tasks. " << std::endl;
 
-        init_task_set(task_info.tasks, TASK_COUNT, i, process_count, process_rank);
-        pthread_mutex_lock(&mutex);
-        task_info.executed_tasks = 0;
-        task_info.remaining_tasks = TASK_COUNT;
-        task_info.additional_tasks = 0;
-        pthread_mutex_unlock(&mutex);
+        init_task_set(task_info.tasks, NUMBER_OF_TASKS, i, process_count, process_rank);
 
-        execute_task_set(task_info.tasks);
-        std::cout << "Process " << process_rank << " executed tasks in " <<
-                  MPI_Wtime() - start_time << ". Now requesting for some additional. " << std::endl;
+        task_info.remaining_tasks = NUMBER_OF_TASKS;
+        task_info.executed_tasks = 0;
+        task_info.additional_tasks = 0;
+
+        execute_tasks(task_info.tasks);
+//        std::cout << "Process " << process_rank << " has executed tasks in " <<
+//                  MPI_Wtime() - start_time << " seconds. Now requesting for some additional tasks. " << std::endl;
         int thread_response;
 
         for (int proc_idx = 0; proc_idx < process_count; proc_idx++) {
             if (proc_idx == process_rank) {
                 continue;
             }
-            std::cout << "Process " << process_rank << " is asking " << proc_idx <<
-                      " for some tasks." << std::endl;
-
             MPI_Send(&process_rank, 1, MPI_INT, proc_idx, 1, MPI_COMM_WORLD);
-
-            std::cout << "Proc" << process_rank << " is waiting for task count from " << proc_idx << std::endl;
-
-            MPI_Recv(&thread_response, 1, MPI_INT, proc_idx, SENDING_TASK_COUNT, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
-
-            std::cout << "Process " << proc_idx << " answered: 'I have " << thread_response << " tasks'." << std::endl;
-
-            if (thread_response == NO_TASKS_TO_SHARE) {
+            MPI_Recv(&thread_response, 1, MPI_INT, proc_idx, TASK_COUNT_TAG, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+            if (thread_response == NO_TASKS) {
                 continue;
             }
+            task_info.additional_tasks += thread_response;
+//            print_tasks(task_info.tasks, process_rank);
 
-            task_info.additional_tasks = thread_response;
-            memset(task_info.tasks, 0, TASK_COUNT);
+            memset(task_info.tasks, 0, NUMBER_OF_TASKS * sizeof(int));
 
-            std::cout << "Process" << process_rank << " is waiting for tasks." << std::endl;
-            // TODO: endless waiting
-            MPI_Recv(task_info.tasks, task_info.additional_tasks, MPI_INT, proc_idx, SENDING_TASKS, MPI_COMM_WORLD,
+            MPI_Recv(task_info.tasks, thread_response, MPI_INT, proc_idx, TASKS_TAG, MPI_COMM_WORLD,
                      MPI_STATUS_IGNORE);
-
+//            print_tasks(task_info.tasks, process_rank);
             pthread_mutex_lock(&mutex);
-            task_info.remaining_tasks = task_info.additional_tasks;
+            task_info.remaining_tasks = thread_response;
             pthread_mutex_unlock(&mutex);
-            execute_task_set(task_info.tasks);
+            execute_tasks(task_info.tasks);
         }
         finish_time = MPI_Wtime();
         iteration_duration = finish_time - start_time;
 
         MPI_Allreduce(&iteration_duration, &longest_iteration, 1, MPI_DOUBLE, MPI_MAX, MPI_COMM_WORLD);
         MPI_Allreduce(&iteration_duration, &shortest_iteration, 1, MPI_DOUBLE, MPI_MIN, MPI_COMM_WORLD);
+        MPI_Allreduce(&task_info.executed_tasks, &total_executed_tasks, 1, MPI_INT, MPI_SUM, MPI_COMM_WORLD);
 
         MPI_Barrier(MPI_COMM_WORLD);
-
-        std::cout << "Process " << process_rank << " executed " << task_info.executed_tasks <<
+        std::cout << "[EXECUTOR] Process " << process_rank << " executed " << task_info.executed_tasks <<
                   " tasks. " << task_info.additional_tasks << " were additional." << std::endl;
-        std::cout << "Sum of square roots is " << global_result << ". Time taken: " << iteration_duration << std::endl;
+        if (process_rank == 0) {
+            std::cout << "[EXECUTOR] Total executed tasks: " << total_executed_tasks << std::endl;
+        }
+        std::cout << "[EXECUTOR] Sum of square roots is " << global_result << ". Time taken: " << iteration_duration << std::endl;
 
         current_disbalance = (longest_iteration - shortest_iteration) / longest_iteration;
         summary_disbalance += current_disbalance;
-        std::cout << "Max time difference: " << longest_iteration - shortest_iteration << std::endl;
-        std::cout << "Disbalance rate is " << current_disbalance * 100 << "%" << std::endl;
+        std::cout << "[EXECUTOR] Max time difference: " << longest_iteration - shortest_iteration << std::endl;
+        std::cout << "[EXECUTOR] Disbalance rate is " << current_disbalance * 100 << "%" << std::endl;
     }
 
-    std::cout << "Process " << process_rank << " finished iterations sending signal" << std::endl;
+    std::cout << "Process " << process_rank << " finished iterations sending signal." << std::endl;
 
     pthread_mutex_lock(&mutex);
     finished_execution = true;
     delete[] task_info.tasks;
     pthread_mutex_unlock(&mutex);
 
-    int signal = EXECUTOR_FINISHED_WORK;
+    int signal = FINISH_SIGNAL;
     MPI_Send(&signal, 1, MPI_INT, process_rank, 1, MPI_COMM_WORLD);
 }
 
-void *start_reciever(void *args) {
-    int process_count;
-    int process_rank;
-    MPI_Comm_rank(MPI_COMM_WORLD, &process_rank);
+void *start_receiver(void *args) {
+    int process_count, process_rank;
     MPI_Comm_size(MPI_COMM_WORLD, &process_count);
-
+    MPI_Comm_rank(MPI_COMM_WORLD, &process_rank);
     int asking_proc_rank, answer, pending_message;
     MPI_Status status;
     MPI_Barrier(MPI_COMM_WORLD);
@@ -167,27 +156,30 @@ void *start_reciever(void *args) {
 
         MPI_Recv(&pending_message, 1, MPI_INT, MPI_ANY_SOURCE, 1, MPI_COMM_WORLD, &status);
 
-        if (pending_message == EXECUTOR_FINISHED_WORK) {
-            std::cout << "Executor finished work on process " << process_rank << std::endl;
+        if (pending_message == FINISH_SIGNAL) {
             break;
         }
         asking_proc_rank = pending_message;
         pthread_mutex_lock(&mutex);
-        std::cout << "Process " << asking_proc_rank << " requested tasks. I have " <<
-                  task_info.remaining_tasks << " tasks now. " << std::endl;
-        if (task_info.remaining_tasks >= MIN_TASKS_TO_SHARE) {
-            answer = task_info.remaining_tasks / (process_count * 2);
-            task_info.remaining_tasks = task_info.remaining_tasks / (process_count * 2);
+        if (task_info.remaining_tasks >= MIN_SHARING_TASKS) {
+            // сколько задач готов отправить
+            answer = task_info.remaining_tasks / (process_count);
+//            std::cout << "[REQUEST RECEIVER] Process " << asking_proc_rank << " has requested tasks from" << process_rank << ". Process " <<process_rank<<" has "
+//            << task_info.remaining_tasks <<" tasks and can send "
+//            << answer << " tasks now. " << std::endl;
+            // осталось задач
+//            task_info.remaining_tasks = TASK_COUNT - answer;
+            task_info.remaining_tasks -= answer;
 
-            std::cout << "Sharing " << answer << " tasks. " << std::endl;
-
-            MPI_Send(&answer, 1, MPI_INT, asking_proc_rank, SENDING_TASK_COUNT, MPI_COMM_WORLD);
-
-            MPI_Send(&task_info.tasks[TASK_COUNT - answer], answer, MPI_INT, asking_proc_rank, SENDING_TASKS,
+//            std::cout << "[REQUEST RECEIVER] Process "<< process_rank << " is sending " << answer << " tasks to process " << asking_proc_rank << std::endl;
+            MPI_Send(&answer, 1, MPI_INT, asking_proc_rank, TASK_COUNT_TAG, MPI_COMM_WORLD);
+            MPI_Send(&task_info.tasks[NUMBER_OF_TASKS - answer], answer, MPI_INT, asking_proc_rank, TASKS_TAG,
                      MPI_COMM_WORLD);
         } else {
-            answer = NO_TASKS_TO_SHARE;
-            MPI_Send(&answer, 1, MPI_INT, asking_proc_rank, SENDING_TASK_COUNT, MPI_COMM_WORLD);
+            answer = NO_TASKS;
+//            std::cout << "[REQUEST RECEIVER] Process " << asking_proc_rank << " requested tasks from " << process_rank << ". Process "<<process_rank<<" has "
+//                      << task_info.remaining_tasks <<" tasks and can't send any tasks now. " << std::endl;
+            MPI_Send(&answer, 1, MPI_INT, asking_proc_rank, TASK_COUNT_TAG, MPI_COMM_WORLD);
         }
         pthread_mutex_unlock(&mutex);
     }
@@ -216,7 +208,7 @@ int main(int argc, char *argv[]) {
     pthread_mutex_init(&mutex, nullptr);
     pthread_attr_init(&thread_attributes);
     pthread_attr_setdetachstate(&thread_attributes, PTHREAD_CREATE_JOINABLE);
-    pthread_create(&receiver_thread, &thread_attributes, start_reciever, nullptr);
+    pthread_create(&receiver_thread, &thread_attributes, start_receiver, nullptr);
     start_executor(process_count, process_rank);
     pthread_join(receiver_thread, nullptr);
     pthread_attr_destroy(&thread_attributes);
@@ -224,7 +216,7 @@ int main(int argc, char *argv[]) {
 
     if (process_rank == 0) {
         std::cout << "Summary disbalance:" << summary_disbalance / (LISTS_COUNT) * 100 << "%" << std::endl;
-        std::cout << "time taken: " << MPI_Wtime() - start << std::endl;
+        std::cout << "Time taken: " << MPI_Wtime() - start << std::endl;
     }
 
     MPI_Finalize();
