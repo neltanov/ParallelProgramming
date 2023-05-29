@@ -4,8 +4,8 @@
 #include <cstdlib>
 
 constexpr int L = 1000;
-constexpr int LISTS_COUNT = 1;
-constexpr int NUMBER_OF_TASKS = 10;
+constexpr int LISTS_COUNT = 10;
+constexpr int NUMBER_OF_TASKS = 20000;
 constexpr int MIN_SHARING_TASKS = 2;
 
 constexpr int FINISH_SIGNAL = -1;

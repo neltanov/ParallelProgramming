@@ -6,8 +6,8 @@
 #include <cstring>
 
 constexpr int L = 1000;
-constexpr int NUM_OF_TASK_LISTS = 1;
-constexpr int NUM_OF_TASKS = 10;
+constexpr int NUM_OF_TASK_LISTS = 10;
+constexpr int NUM_OF_TASKS = 20000;
 constexpr int MIN_SHARING_TASKS = 2;
 
 constexpr int FINISH_SIGNAL = -1;
@@ -118,8 +118,6 @@ void start_executor(int process_count, int process_rank) {
         finish_time = MPI_Wtime();
         iteration_duration = finish_time - start_time;
 
-        MPI_Barrier(MPI_COMM_WORLD);
-
         MPI_Allreduce(&iteration_duration, &longest_iteration, 1, MPI_DOUBLE, MPI_MAX, MPI_COMM_WORLD);
         MPI_Allreduce(&iteration_duration, &shortest_iteration, 1, MPI_DOUBLE, MPI_MIN, MPI_COMM_WORLD);
         MPI_Allreduce(&task_info.executed_tasks, &total_executed_tasks, 1, MPI_INT, MPI_SUM, MPI_COMM_WORLD);
@@ -218,16 +216,12 @@ int main(int argc, char *argv[]) {
     MPI_Comm_size(MPI_COMM_WORLD, &process_count);
 
     pthread_t receiver_thread;
-    pthread_attr_t thread_attributes;
 
     double start = MPI_Wtime();
     pthread_mutex_init(&mutex, nullptr);
-    pthread_attr_init(&thread_attributes);
-    pthread_attr_setdetachstate(&thread_attributes, PTHREAD_CREATE_JOINABLE);
-    pthread_create(&receiver_thread, &thread_attributes, start_receiver, nullptr);
+    pthread_create(&receiver_thread, nullptr, start_receiver, nullptr);
     start_executor(process_count, process_rank);
     pthread_join(receiver_thread, nullptr);
-    pthread_attr_destroy(&thread_attributes);
     pthread_mutex_destroy(&mutex);
 
     if (process_rank == 0) {
